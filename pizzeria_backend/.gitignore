@@ -1,0 +1,8 @@
+# Archivos de entorno
+.env
+*.pyc
+__pycache__/
+
+# Archivos secretos
+tu-clave-firebase.json
+pizzeriabackend-firebase-adminsdk-fbsvc-f8a41c27f7.json

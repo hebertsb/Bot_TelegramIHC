@@ -1,0 +1,9 @@
+# Credenciales y archivos sensibles
+*.json
+
+# Entorno virtual de Python
+/venv/
+
+# Archivos de cache de Python
+__pycache__/
+*.pyc
