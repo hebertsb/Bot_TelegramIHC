@@ -392,7 +392,6 @@ def update_order_status(order_id):
     Endpoint para que un sistema externo (ej. un panel de admin) actualice el estado de un pedido.
     """
     try:
-    try:
         # Intentar obtener JSON de forma estándar
         data = None
         try:
