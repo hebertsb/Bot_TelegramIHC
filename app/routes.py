@@ -7,6 +7,8 @@ import google.generativeai as genai
 from flask import request, jsonify, render_template_string
 from datetime import datetime
 import pytz
+import threading
+import time
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 # Importaciones de tu aplicación
@@ -239,6 +241,64 @@ async def get_invoice(order_id):
         logger.error(f"Error al generar factura para {order_id}: {e}", exc_info=True)
         return "Error interno del servidor al procesar la factura.", 500
 
+    except Exception as e:
+        logger.error(f"Error al generar factura para {order_id}: {e}", exc_info=True)
+        return "Error interno del servidor al procesar la factura.", 500
+
+def process_order_status_update(order_id, nuevo_estado):
+    """
+    Lógica central para actualizar el estado y notificar.
+    Retorna True si tuvo éxito, False si falló.
+    """
+    try:
+        # 1. Obtener el pedido
+        order = obtener_pedido_por_id(order_id)
+        if not order:
+            logger.warning(f"Intento de actualizar pedido inexistente: {order_id}")
+            return False
+
+        # 2. Actualizar en BD
+        if not actualizar_estado_pedido(order_id, nuevo_estado):
+            return False
+        
+        # 3. Notificar al cliente
+        chat_id = order.get('chat_id')
+        if chat_id:
+            mensajes_estado = {
+                "Confirmado": f"✅ ¡Tu pedido #{order_id} ha sido confirmado por el local!",
+                "En preparación": f"👨‍🍳 ¡Estamos preparando tu pedido #{order_id}!",
+                "En camino": f"🛵 ¡Tu pedido #{order_id} ya está en camino! Prepárate para disfrutar.",
+                "Entregado": f"🎉 ¡Tu pedido #{order_id} ha sido entregado! Gracias por preferirnos.",
+                "Cancelado": f"❌ Lo sentimos, tu pedido #{order_id} ha sido cancelado."
+            }
+            mensaje = mensajes_estado.get(nuevo_estado, f"ℹ️ El estado de tu pedido #{order_id} ha cambiado a: {nuevo_estado}")
+            telegram_service.send_message(chat_id=chat_id, text=mensaje)
+            logger.info(f"Notificación enviada a {chat_id}: {nuevo_estado}")
+        
+        return True
+    except Exception as e:
+        logger.error(f"Error en process_order_status_update: {e}", exc_info=True)
+        return False
+
+def run_order_simulation(order_id):
+    """
+    Simula el ciclo de vida de un pedido para demostraciones.
+    """
+    logger.info(f"Iniciando simulación para el pedido {order_id}")
+    
+    # Secuencia de estados y tiempos de espera (en segundos)
+    secuencia = [
+        ("Confirmado", 15),
+        ("En preparación", 20),
+        ("En camino", 20),
+        ("Entregado", 20)
+    ]
+    
+    for estado, espera in secuencia:
+        time.sleep(espera)
+        logger.info(f"Simulación: Cambiando pedido {order_id} a '{estado}'")
+        process_order_status_update(order_id, estado)
+
 @app.route('/update_status/<string:order_id>', methods=['POST'])
 async def update_order_status(order_id):
     """
@@ -251,33 +311,10 @@ async def update_order_status(order_id):
         if not nuevo_estado:
             return jsonify({"status": "error", "message": "El campo 'status' es requerido."}), 400
 
-        # 1. Obtener el pedido para saber a quién notificar
-        order = obtener_pedido_por_id(order_id)
-        if not order:
-            return jsonify({"status": "error", "message": f"Pedido {order_id} no encontrado."}), 404
-
-        # 2. Actualizar el estado en la base de datos
-        if not actualizar_estado_pedido(order_id, nuevo_estado):
-            return jsonify({"status": "error", "message": "No se pudo actualizar el estado en la base de datos."}), 500
-        
-        # 3. Notificar al cliente sobre el cambio de estado
-        chat_id = order.get('chat_id')
-        if chat_id:
-            # Mensajes predefinidos para diferentes estados
-            mensajes_estado = {
-                "Confirmado": f"✅ ¡Tu pedido #{order_id} ha sido confirmado por el local!",
-                "En preparación": f"👨‍🍳 ¡Estamos preparando tu pedido #{order_id}!",
-                "En camino": f"🛵 ¡Tu pedido #{order_id} ya está en camino! Prepárate para disfrutar.",
-                "Entregado": f"🎉 ¡Tu pedido #{order_id} ha sido entregado! Gracias por preferirnos.",
-                "Cancelado": f"❌ Lo sentimos, tu pedido #{order_id} ha sido cancelado."
-            }
-            
-            mensaje = mensajes_estado.get(nuevo_estado, f"ℹ️ El estado de tu pedido #{order_id} ha cambiado a: {nuevo_estado}")
-            
-            telegram_service.send_message(chat_id=chat_id, text=mensaje)
-            logger.info(f"Notificación de estado '{nuevo_estado}' enviada al chat_id {chat_id} para el pedido {order_id}.")
-
-        return jsonify({"status": "success", "order_id": order_id, "new_status": nuevo_estado})
+        if process_order_status_update(order_id, nuevo_estado):
+             return jsonify({"status": "success", "order_id": order_id, "new_status": nuevo_estado})
+        else:
+             return jsonify({"status": "error", "message": "No se pudo actualizar el pedido."}), 500
 
     except Exception as e:
         logger.error(f"Error en /update_status/{order_id}: {e}", exc_info=True)
@@ -371,6 +408,12 @@ async def submit_order():
             chat_id=RESTAURANT_CHAT_ID, 
             text=restaurant_alert
         )
+
+        # 4. Iniciar Simulación de Estados (DEMO)
+        # Esto cambiará el estado automáticamente cada X segundos
+        simulation_thread = threading.Thread(target=run_order_simulation, args=(order.get('id'),))
+        simulation_thread.daemon = True # Para que no bloquee el cierre del server
+        simulation_thread.start()
 
         return jsonify({"status": "success", "order_id": order.get('id')})
 

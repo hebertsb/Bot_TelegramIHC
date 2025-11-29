@@ -4,6 +4,9 @@ Esta documentación técnica describe el funcionamiento completo del backend des
 
 **Base URL (Producción):** `https://bottelegramihc-production.up.railway.app`
 
+> [!IMPORTANT]
+> **Modo Simulación Activo:** Para propósitos de demostración, cada nuevo pedido cambiará automáticamente de estado cada 15-20 segundos (Confirmado -> En preparación -> En camino -> Entregado). Esto permite probar el tracking en tiempo real sin intervención manual.
+
 ---
 
 ## 1. Endpoints Públicos (Frontend WebApp)
@@ -130,6 +133,23 @@ Cambia el estado de un pedido y notifica al cliente.
 *   **Endpoint:** `/get_orders`
 *   **Método:** `GET`
 *   **Respuesta:** Lista de todos los pedidos almacenados en Firestore.
+
+### 2.3. Rastrear Pedido Individual
+Obtiene el estado actual y detalles de un pedido específico.
+
+*   **Endpoint:** `/get_order/<order_id>`
+*   **Método:** `GET`
+*   **Respuesta (200 OK):**
+    ```json
+    {
+        "id": "ORD-123456",
+        "status": "En camino",
+        "total": 150.50,
+        "items": [...],
+        "date": "...",
+        ...
+    }
+    ```
 
 ---
 
