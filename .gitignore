@@ -4,3 +4,5 @@ __pycache__/
 .env
 .DS_Store
 pizzeriabackend-firebase-adminsdk-fbsvc-f65e1c0eb7.json
+credenciales_railway.txt
+VARIABLES_ENTORNO_RAILWAY.txt
