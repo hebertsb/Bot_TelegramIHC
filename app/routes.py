@@ -387,12 +387,14 @@ def run_order_simulation(order_id):
         logger.error(f"Error en simulación del pedido {order_id}: {e}", exc_info=True)
 
 @app.route('/update_status/<string:order_id>', methods=['POST'])
-async def update_order_status(order_id):
+def update_order_status(order_id):
     """
     Endpoint para que un sistema externo (ej. un panel de admin) actualice el estado de un pedido.
     """
     try:
         data = request.get_json()
+        logger.info(f"Recibida petición de actualización para {order_id}. Payload: {data}")
+        
         nuevo_estado = data.get('status')
         driver_location = data.get('driver_location') # Opcional
 
@@ -402,10 +404,12 @@ async def update_order_status(order_id):
         if process_order_status_update(order_id, nuevo_estado, driver_location):
              return jsonify({"status": "success", "order_id": order_id, "new_status": nuevo_estado})
         else:
-             return jsonify({"status": "error", "message": "No se pudo actualizar el pedido."}), 500
+             # Si falla process_order_status_update, es porque falló la BD o no existe el pedido.
+             # La notificación fallida YA está manejada dentro y no retorna False.
+             return jsonify({"status": "error", "message": "No se pudo actualizar el pedido (Error BD o ID inválido)."}), 500
 
     except Exception as e:
-        logger.error(f"Error en /update_status/{order_id}: {e}", exc_info=True)
+        logger.error(f"Error NO CONTROLADO en /update_status/{order_id}: {e}", exc_info=True)
         return jsonify({"status": "error", "message": "Error interno del servidor."}), 500
 
 
