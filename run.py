@@ -7,14 +7,12 @@ from telegram.ext import Application
 
 from app import app
 from app.bot import get_bot_handlers
+from app.routes import telegram_service
 from config import BOT_TOKEN
 from asgiref.wsgi import WsgiToAsgi
-
-logger = logging.getLogger(__name__)
-
 import os
 
-# ... imports ...
+logger = logging.getLogger(__name__)
 
 def run_flask():
     """Corre el servidor web Flask usando Uvicorn (compatible con async)"""
@@ -31,6 +29,9 @@ async def run_telegram_bot():
     app.bot_loop = asyncio.get_running_loop()
 
     application = Application.builder().token(BOT_TOKEN).build()
+    
+    # --- CRÍTICO: Configurar el servicio de Telegram para que routes.py pueda usarlo ---
+    telegram_service.configure(application.bot, app.bot_loop)
     
     handlers = get_bot_handlers()
     for handler in handlers:
