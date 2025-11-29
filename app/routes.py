@@ -264,24 +264,28 @@ def process_order_status_update(order_id, nuevo_estado, driver_location=None):
         
         # 3. Notificar al cliente
         # Solo notificamos si cambia el estado (para no spammear con actualizaciones de ubicación)
-        chat_id = order.get('chat_id')
-        estado_anterior = order.get('status')
-        
-        if chat_id and estado_anterior != nuevo_estado:
-            mensajes_estado = {
-                "Confirmado": f"✅ ¡Tu pedido #{order_id} ha sido confirmado por el local!",
-                "En preparación": f"👨‍🍳 ¡Estamos preparando tu pedido #{order_id}!",
-                "En camino": f"🛵 ¡Tu pedido #{order_id} ya está en camino! Prepárate para disfrutar.",
-                "Entregado": f"🎉 ¡Tu pedido #{order_id} ha sido entregado! Gracias por preferirnos.",
-                "Cancelado": f"❌ Lo sentimos, tu pedido #{order_id} ha sido cancelado."
-            }
-            mensaje = mensajes_estado.get(nuevo_estado, f"ℹ️ El estado de tu pedido #{order_id} ha cambiado a: {nuevo_estado}")
-            telegram_service.send_message(chat_id=chat_id, text=mensaje)
-            logger.info(f"Notificación enviada a {chat_id}: {nuevo_estado}")
+        try:
+            chat_id = order.get('chat_id')
+            estado_anterior = order.get('status')
+            
+            if chat_id and estado_anterior != nuevo_estado:
+                mensajes_estado = {
+                    "Confirmado": f"✅ ¡Tu pedido #{order_id} ha sido confirmado por el local!",
+                    "En preparación": f"👨‍🍳 ¡Estamos preparando tu pedido #{order_id}!",
+                    "En camino": f"🛵 ¡Tu pedido #{order_id} ya está en camino! Prepárate para disfrutar.",
+                    "Entregado": f"🎉 ¡Tu pedido #{order_id} ha sido entregado! Gracias por preferirnos.",
+                    "Cancelado": f"❌ Lo sentimos, tu pedido #{order_id} ha sido cancelado."
+                }
+                mensaje = mensajes_estado.get(nuevo_estado, f"ℹ️ El estado de tu pedido #{order_id} ha cambiado a: {nuevo_estado}")
+                telegram_service.send_message(chat_id=chat_id, text=mensaje)
+                logger.info(f"Notificación enviada a {chat_id}: {nuevo_estado}")
+        except Exception as e_notify:
+            # Si falla la notificación, NO fallamos todo el proceso. Solo logueamos el error.
+            logger.error(f"Error al enviar notificación de estado para {order_id}: {e_notify}")
         
         return True
     except Exception as e:
-        logger.error(f"Error en process_order_status_update: {e}", exc_info=True)
+        logger.error(f"Error CRÍTICO en process_order_status_update: {e}", exc_info=True)
         return False
 
 def calculate_distance(lat1, lon1, lat2, lon2):
