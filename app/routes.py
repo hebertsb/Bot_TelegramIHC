@@ -2,6 +2,7 @@
 import logging
 import asyncio
 import json
+import httpx
 import google.generativeai as genai
 from flask import request, jsonify, render_template_string
 from datetime import datetime
@@ -386,3 +387,63 @@ def generate_pizza_idea():
     except Exception as e:
         logger.error(f"Error en /generate_pizza_idea: {e}", exc_info=True)
         return jsonify({"error": "Ocurrió un error inesperado al generar la idea."}), 500
+
+@app.route('/reverse_geocode', methods=['GET'])
+async def reverse_geocode():
+    """
+    Proxy para realizar geocodificación inversa usando Nominatim (OpenStreetMap).
+    Esto evita problemas de CORS en el frontend al realizar la petición desde el servidor.
+    """
+    try:
+        lat = request.args.get('lat')
+        lon = request.args.get('lon')
+
+        if not lat or not lon:
+            return jsonify({"error": "Parámetros 'lat' y 'lon' son requeridos."}), 400
+
+        # Validar que sean números
+        try:
+            float(lat)
+            float(lon)
+        except ValueError:
+            return jsonify({"error": "Latitud y longitud deben ser números válidos."}), 400
+
+        # URL de Nominatim
+        nominatim_url = "https://nominatim.openstreetmap.org/reverse"
+        
+        # Headers requeridos por Nominatim (User-Agent es obligatorio)
+        headers = {
+            "User-Agent": "PizzeriaNovaBot/1.0 (hebertsb@gmail.com)" 
+        }
+        
+        params = {
+            "format": "json",
+            "lat": lat,
+            "lon": lon,
+            "zoom": 18,
+            "addressdetails": 1
+        }
+
+        async with httpx.AsyncClient() as client:
+            response = await client.get(nominatim_url, params=params, headers=headers, timeout=10.0)
+            
+            if response.status_code != 200:
+                logger.error(f"Error de Nominatim: {response.status_code} - {response.text}")
+                return jsonify({"error": "No se pudo obtener la dirección del servicio externo."}), 502
+            
+            data = response.json()
+            
+            # Extraer el nombre legible
+            display_name = data.get('display_name', 'Dirección desconocida')
+            
+            return jsonify({
+                "display_name": display_name,
+                "raw": data # Opcional: devolver datos crudos si el frontend los necesita
+            })
+
+    except httpx.RequestError as e:
+        logger.error(f"Error de conexión al llamar a Nominatim: {e}", exc_info=True)
+        return jsonify({"error": "Error de conexión con el servicio de mapas."}), 503
+    except Exception as e:
+        logger.error(f"Error inesperado en /reverse_geocode: {e}", exc_info=True)
+        return jsonify({"error": "Error interno del servidor."}), 500
