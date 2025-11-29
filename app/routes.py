@@ -6,6 +6,7 @@ import httpx
 import google.generativeai as genai
 from flask import request, jsonify, render_template_string
 from datetime import datetime
+import pytz
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 # Importaciones de tu aplicación
@@ -51,12 +52,14 @@ telegram_service = TelegramService()
 
 def generate_telegram_invoice_text(order):
     """Genera el texto de la factura para ser enviado por Telegram."""
+    currency = order.get('currency', 'Bs')
+    
     items_list = []
     for item in order.get('items', []):
         item_total = item['price'] * item['quantity']
         # Usamos formato de ancho fijo simple con `ljust` para alinear
         name_part = f"{item.get('emoji', '🍕')} {item['name']}"
-        price_part = f"x{item['quantity']} ... ${item_total:.2f}"
+        price_part = f"x{item['quantity']} ... {currency} {item_total:.2f}"
         items_list.append(f"<code>{name_part.ljust(20)} {price_part}</code>")
     
     items_text = "\n".join(items_list)
@@ -66,16 +69,27 @@ def generate_telegram_invoice_text(order):
         location = order['location']
         address_text = f"Lat: {location.get('latitude')}, Lon: {location.get('longitude')}"
 
-    # Formatear fecha
+    # Formatear fecha con zona horaria de Bolivia
+    date_ts = order.get('date_ts')
     date_str = order.get('date')
-    if date_str:
-        try:
-            order_date = datetime.fromisoformat(date_str.replace('Z', '+00:00'))
-            date_formatted = order_date.strftime("%d/%m/%Y %H:%M")
-        except (ValueError, TypeError):
-            date_formatted = "Ahora mismo"
-    else:
-        date_formatted = "Ahora mismo"
+    
+    try:
+        if isinstance(date_ts, (int, float)):
+             # Si viene timestamp en ms
+            dt_utc = datetime.fromtimestamp(date_ts / 1000, tz=pytz.utc)
+        elif date_str:
+             # Si viene string ISO
+            dt_utc = datetime.fromisoformat(date_str.replace('Z', '+00:00'))
+        else:
+            dt_utc = datetime.now(pytz.utc)
+
+        # Convertir a America/La_Paz
+        bolivia_tz = pytz.timezone('America/La_Paz')
+        dt_local = dt_utc.astimezone(bolivia_tz)
+        date_formatted = dt_local.strftime("%d/%m/%Y %H:%M")
+    except Exception as e:
+        logger.error(f"Error formateando fecha: {e}")
+        date_formatted = "Fecha desconocida"
 
     invoice_text = (
         f"<b>🍕 Pizzeria Nova - Factura 🍕</b>\n\n"
@@ -87,7 +101,7 @@ def generate_telegram_invoice_text(order):
         f"<b>DETALLES DEL PEDIDO:</b>\n"
         f"{items_text}\n"
         f"━━━━━━━━━━━━━━━━━━\n"
-        f"<b>Total a Pagar: ${order.get('total')}</b>\n\n"
+        f"<b>Total a Pagar: {currency} {order.get('total', 0):.2f}</b>\n\n"
         f"<b>Dirección de Entrega:</b>\n"
         f"<i>{address_text}</i>\n\n"
         f"<b>Método de Pago:</b> {order.get('paymentMethod')}\n\n"
@@ -99,6 +113,8 @@ def generate_telegram_invoice_text(order):
 # Función auxiliar para generar el HTML de la factura (para reutilizar)
 def generate_invoice_html(order):
     """Genera una factura simple en HTML"""
+    currency = order.get('currency', 'Bs')
+    
     # Función para formatear ítems de la factura
     items_html = ""
     for item in order.get('items', []):
@@ -107,22 +123,32 @@ def generate_invoice_html(order):
         <tr>
             <td style="text-align: left; padding: 8px 0;">{item['name']} ({item.get('emoji', '🍕')})</td>
             <td style="text-align: center;">{item['quantity']}</td>
-            <td style="text-align: right;">${item['price']:.2f}</td>
-            <td style="text-align: right;">${total_item:.2f}</td>
+            <td style="text-align: right;">{currency} {item['price']:.2f}</td>
+            <td style="text-align: right;">{currency} {total_item:.2f}</td>
         </tr>
         """
 
-    # Obtener fecha de creación (si existe, si no, usa la actual)
+    # Formatear fecha con zona horaria de Bolivia
+    date_ts = order.get('date_ts')
     date_str = order.get('date')
-    if date_str:
-        try:
-            order_date = datetime.fromisoformat(date_str.replace('Z', '+00:00'))
-        except ValueError:
-            order_date = datetime.now()
-    else:
-        order_date = datetime.now()
     
-    invoice_date = order_date.strftime("%d/%m/%Y %H:%M:%S")
+    try:
+        if isinstance(date_ts, (int, float)):
+             # Si viene timestamp en ms
+            dt_utc = datetime.fromtimestamp(date_ts / 1000, tz=pytz.utc)
+        elif date_str:
+             # Si viene string ISO
+            dt_utc = datetime.fromisoformat(date_str.replace('Z', '+00:00'))
+        else:
+            dt_utc = datetime.now(pytz.utc)
+
+        # Convertir a America/La_Paz
+        bolivia_tz = pytz.timezone('America/La_Paz')
+        dt_local = dt_utc.astimezone(bolivia_tz)
+        invoice_date = dt_local.strftime("%d/%m/%Y %H:%M:%S")
+    except Exception as e:
+        logger.error(f"Error formateando fecha HTML: {e}")
+        invoice_date = "Fecha desconocida"
 
     # Estilo de la factura (se recomienda usar estilos inline para PDFs)
     html_content = f"""
@@ -168,7 +194,7 @@ def generate_invoice_html(order):
             <table class="summary-table" style="margin-top: 20px; float: right; width: 50%;">
                 <tr class="total-row">
                     <td>Total a Pagar:</td>
-                    <td style="text-align: right;">${order['total']}</td>
+                    <td style="text-align: right;">{currency} {order.get('total', 0):.2f}</td>
                 </tr>
             </table>
             <div style="clear: both;"></div>
@@ -269,6 +295,21 @@ def get_orders():
     except Exception as e:
         logger.error(f"Error en /get_orders: {e}", exc_info=True)
         return jsonify({"status": "error", "message": "Error interno del servidor al obtener los pedidos."}), 500
+
+@app.route('/get_order/<string:order_id>', methods=['GET'])
+def get_order(order_id):
+    """
+    Endpoint para obtener un pedido específico por su ID.
+    Útil para el seguimiento del pedido por parte del cliente.
+    """
+    try:
+        order = obtener_pedido_por_id(order_id)
+        if not order:
+            return jsonify({"status": "error", "message": "Pedido no encontrado"}), 404
+        return jsonify(order)
+    except Exception as e:
+        logger.error(f"Error en /get_order/{order_id}: {e}", exc_info=True)
+        return jsonify({"status": "error", "message": "Error interno del servidor."}), 500
 
 
 @app.route('/submit_order', methods=['POST'])
