@@ -392,7 +392,27 @@ def update_order_status(order_id):
     Endpoint para que un sistema externo (ej. un panel de admin) actualice el estado de un pedido.
     """
     try:
-        data = request.get_json()
+    try:
+        # Intentar obtener JSON de forma estándar
+        data = None
+        try:
+            data = request.get_json()
+        except Exception:
+            pass
+
+        # Si falla (por encoding), intentamos decodificar manualmente
+        if data is None:
+            raw_data = request.get_data()
+            try:
+                # Intento 1: UTF-8
+                decoded_str = raw_data.decode('utf-8')
+            except UnicodeDecodeError:
+                # Intento 2: Latin-1 (común en Windows/PowerShell)
+                logger.warning(f"Fallo decodificación UTF-8 para {order_id}, intentando latin-1")
+                decoded_str = raw_data.decode('latin-1')
+            
+            data = json.loads(decoded_str)
+
         logger.info(f"Recibida petición de actualización para {order_id}. Payload: {data}")
         
         nuevo_estado = data.get('status')
