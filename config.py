@@ -3,7 +3,7 @@ import os
 # --- CONFIGURACIÓN -- -
 BOT_TOKEN = "8334575884:AAEivWr_jKwAQ3qAC2aSc569OJeyY0MCom4"
 # Tu URL de Netlify (SIN la barra al final)
-WEB_APP_URL = "https://pizzerianova.netlify.app/"
+WEB_APP_URL = "https://pizzerianova1.netlify.app"
 IMAGE_URL = "https://i.postimg.cc/vmTx9Lsc/Gemini-Generated-Image-msl551msl551msl5.png"
 
 # --- ID del Restaurante/Tienda ---

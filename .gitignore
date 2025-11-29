@@ -1,9 +1,6 @@
-# Credenciales y archivos sensibles
-*.json
-
-# Entorno virtual de Python
-/venv/
-
-# Archivos de cache de Python
+venv/
 __pycache__/
 *.pyc
+.env
+.DS_Store
+pizzeriabackend-firebase-adminsdk-fbsvc-f65e1c0eb7.json

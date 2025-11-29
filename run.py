@@ -34,10 +34,28 @@ async def run_telegram_bot():
     logger.info("Iniciando bot de Telegram (polling)...")
     await application.initialize()
     await application.start()
+    
+    # Configurar los comandos del bot ANTES de iniciar polling
+    try:
+        from telegram import BotCommand
+        commands = [
+            BotCommand("start", "Iniciar el bot"),
+            BotCommand("menu", "Abrir el menú del restaurante"),
+            BotCommand("mispedidos", "Ver el estado de mis pedidos"),
+            BotCommand("help", "Obtener ayuda")
+        ]
+        await application.bot.set_my_commands(commands)
+        logger.info("✅ Comandos del bot configurados exitosamente")
+    except Exception as e:
+        logger.error(f"❌ Error al configurar comandos del bot: {e}")
+    
+    # Ahora sí, iniciar el polling
     await application.updater.start_polling()
+    logger.info("Bot escuchando mensajes...")
 
     # Mantener este hilo vivo
     while True:
+        await asyncio.sleep(3600)
         await asyncio.sleep(3600)
 
 if __name__ == "__main__":
