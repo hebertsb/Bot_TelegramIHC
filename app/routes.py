@@ -9,6 +9,7 @@ from datetime import datetime
 import pytz
 import threading
 import time
+import math
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 # Importaciones de tu aplicación
@@ -280,24 +281,87 @@ def process_order_status_update(order_id, nuevo_estado):
         logger.error(f"Error en process_order_status_update: {e}", exc_info=True)
         return False
 
+def calculate_distance(lat1, lon1, lat2, lon2):
+    """
+    Calcula la distancia en kilómetros entre dos puntos usando la fórmula de Haversine.
+    """
+    R = 6371  # Radio de la Tierra en km
+    dlat = math.radians(lat2 - lat1)
+    dlon = math.radians(lon2 - lon1)
+    a = math.sin(dlat / 2) * math.sin(dlat / 2) + \
+        math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * \
+        math.sin(dlon / 2) * math.sin(dlon / 2)
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+    distance = R * c
+    return distance
+
 def run_order_simulation(order_id):
     """
-    Simula el ciclo de vida de un pedido para demostraciones.
+    Simula el ciclo de vida de un pedido basándose en la distancia real y tiempos de preparación.
+    Usa un factor de aceleración para que la prueba no dure horas reales.
     """
-    logger.info(f"Iniciando simulación para el pedido {order_id}")
+    logger.info(f"Iniciando simulación REALISTA para el pedido {order_id}")
     
-    # Secuencia de estados y tiempos de espera (en segundos)
-    secuencia = [
-        ("Confirmado", 15),
-        ("En preparación", 20),
-        ("En camino", 20),
-        ("Entregado", 20)
-    ]
-    
-    for estado, espera in secuencia:
-        time.sleep(espera)
-        logger.info(f"Simulación: Cambiando pedido {order_id} a '{estado}'")
-        process_order_status_update(order_id, estado)
+    # Configuración de la Simulación
+    RESTAURANT_LAT = -17.7833  # Plaza 24 de Septiembre, Santa Cruz
+    RESTAURANT_LON = -63.1821
+    AVG_SPEED_KMH = 30.0       # Velocidad promedio de la moto
+    PREP_TIME_BASE = 15.0      # Minutos base de preparación
+    TIME_SCALE = 1.0           # 1 segundo simulado = 1 minuto real (Para demos rápidas)
+    # Si quieres tiempo real, pon TIME_SCALE = 60.0 (1 min sim = 1 min real) -> ¡Muy lento para probar!
+
+    try:
+        order = obtener_pedido_por_id(order_id)
+        if not order:
+            return
+
+        # 1. Calcular Tiempos Reales
+        # Tiempo de preparación: Base + 2 min por cada ítem extra
+        num_items = sum(item['quantity'] for item in order.get('items', []))
+        prep_time_minutes = PREP_TIME_BASE + (2 * max(0, num_items - 1))
+        
+        # Tiempo de viaje: Basado en distancia
+        location = order.get('location')
+        if location and 'latitude' in location and 'longitude' in location:
+            client_lat = float(location['latitude'])
+            client_lon = float(location['longitude'])
+            distance_km = calculate_distance(RESTAURANT_LAT, RESTAURANT_LON, client_lat, client_lon)
+            travel_time_minutes = (distance_km / AVG_SPEED_KMH) * 60
+            # Añadir un "colchón" de tráfico (20%)
+            travel_time_minutes *= 1.2
+        else:
+            # Si no hay ubicación, asumir un promedio de 5km
+            distance_km = 5.0
+            travel_time_minutes = 15.0
+
+        logger.info(f"Simulación {order_id}: Distancia {distance_km:.2f}km. Prep: {prep_time_minutes}m. Viaje: {travel_time_minutes:.2f}m.")
+
+        # 2. Ejecutar Secuencia (Acelerada)
+        
+        # Paso 1: Confirmar (Rápido)
+        time.sleep(2) 
+        process_order_status_update(order_id, "Confirmado")
+        
+        # Paso 2: Preparación
+        # Esperamos el tiempo de preparación (escalado)
+        wait_prep = prep_time_minutes * TIME_SCALE
+        logger.info(f"Simulación {order_id}: Cocinando por {wait_prep:.1f}s simulados ({prep_time_minutes}m reales)")
+        time.sleep(wait_prep)
+        process_order_status_update(order_id, "En preparación")
+        
+        # Paso 3: En Camino (Cuando termina de cocinar)
+        # Pequeña pausa para empaquetado
+        time.sleep(3)
+        process_order_status_update(order_id, "En camino")
+        
+        # Paso 4: Viaje
+        wait_travel = travel_time_minutes * TIME_SCALE
+        logger.info(f"Simulación {order_id}: Viajando por {wait_travel:.1f}s simulados ({travel_time_minutes:.1f}m reales)")
+        time.sleep(wait_travel)
+        process_order_status_update(order_id, "Entregado")
+
+    except Exception as e:
+        logger.error(f"Error en simulación del pedido {order_id}: {e}", exc_info=True)
 
 @app.route('/update_status/<string:order_id>', methods=['POST'])
 async def update_order_status(order_id):
