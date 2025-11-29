@@ -246,7 +246,7 @@ async def get_invoice(order_id):
         logger.error(f"Error al generar factura para {order_id}: {e}", exc_info=True)
         return "Error interno del servidor al procesar la factura.", 500
 
-def process_order_status_update(order_id, nuevo_estado):
+def process_order_status_update(order_id, nuevo_estado, driver_location=None):
     """
     Lógica central para actualizar el estado y notificar.
     Retorna True si tuvo éxito, False si falló.
@@ -259,12 +259,15 @@ def process_order_status_update(order_id, nuevo_estado):
             return False
 
         # 2. Actualizar en BD
-        if not actualizar_estado_pedido(order_id, nuevo_estado):
+        if not actualizar_estado_pedido(order_id, nuevo_estado, driver_location):
             return False
         
         # 3. Notificar al cliente
+        # Solo notificamos si cambia el estado (para no spammear con actualizaciones de ubicación)
         chat_id = order.get('chat_id')
-        if chat_id:
+        estado_anterior = order.get('status')
+        
+        if chat_id and estado_anterior != nuevo_estado:
             mensajes_estado = {
                 "Confirmado": f"✅ ¡Tu pedido #{order_id} ha sido confirmado por el local!",
                 "En preparación": f"👨‍🍳 ¡Estamos preparando tu pedido #{order_id}!",
@@ -308,57 +311,73 @@ def run_order_simulation(order_id):
     AVG_SPEED_KMH = 30.0       # Velocidad promedio de la moto
     PREP_TIME_BASE = 15.0      # Minutos base de preparación
     TIME_SCALE = 1.0           # 1 segundo simulado = 1 minuto real (Para demos rápidas)
-    # Si quieres tiempo real, pon TIME_SCALE = 60.0 (1 min sim = 1 min real) -> ¡Muy lento para probar!
-
+    
     try:
         order = obtener_pedido_por_id(order_id)
         if not order:
             return
 
         # 1. Calcular Tiempos Reales
-        # Tiempo de preparación: Base + 2 min por cada ítem extra
         num_items = sum(item['quantity'] for item in order.get('items', []))
         prep_time_minutes = PREP_TIME_BASE + (2 * max(0, num_items - 1))
         
         # Tiempo de viaje: Basado en distancia
+        client_lat = RESTAURANT_LAT # Default si no hay ubicación
+        client_lon = RESTAURANT_LON
+        
         location = order.get('location')
         if location and 'latitude' in location and 'longitude' in location:
             client_lat = float(location['latitude'])
             client_lon = float(location['longitude'])
             distance_km = calculate_distance(RESTAURANT_LAT, RESTAURANT_LON, client_lat, client_lon)
             travel_time_minutes = (distance_km / AVG_SPEED_KMH) * 60
-            # Añadir un "colchón" de tráfico (20%)
-            travel_time_minutes *= 1.2
+            travel_time_minutes *= 1.2 # Colchón de tráfico
         else:
-            # Si no hay ubicación, asumir un promedio de 5km
             distance_km = 5.0
             travel_time_minutes = 15.0
+            # Simular un punto a 5km
+            client_lat = RESTAURANT_LAT + 0.045
+            client_lon = RESTAURANT_LON + 0.045
 
         logger.info(f"Simulación {order_id}: Distancia {distance_km:.2f}km. Prep: {prep_time_minutes}m. Viaje: {travel_time_minutes:.2f}m.")
 
         # 2. Ejecutar Secuencia (Acelerada)
         
-        # Paso 1: Confirmar (Rápido)
+        # Paso 1: Confirmar
         time.sleep(2) 
         process_order_status_update(order_id, "Confirmado")
         
         # Paso 2: Preparación
-        # Esperamos el tiempo de preparación (escalado)
         wait_prep = prep_time_minutes * TIME_SCALE
-        logger.info(f"Simulación {order_id}: Cocinando por {wait_prep:.1f}s simulados ({prep_time_minutes}m reales)")
+        logger.info(f"Simulación {order_id}: Cocinando por {wait_prep:.1f}s simulados")
         time.sleep(wait_prep)
         process_order_status_update(order_id, "En preparación")
         
-        # Paso 3: En Camino (Cuando termina de cocinar)
-        # Pequeña pausa para empaquetado
+        # Paso 3: En Camino (Inicio)
         time.sleep(3)
-        process_order_status_update(order_id, "En camino")
+        process_order_status_update(order_id, "En camino", driver_location={"latitude": RESTAURANT_LAT, "longitude": RESTAURANT_LON})
         
-        # Paso 4: Viaje
+        # Paso 4: Viaje con Interpolación (Movimiento suave)
         wait_travel = travel_time_minutes * TIME_SCALE
-        logger.info(f"Simulación {order_id}: Viajando por {wait_travel:.1f}s simulados ({travel_time_minutes:.1f}m reales)")
-        time.sleep(wait_travel)
-        process_order_status_update(order_id, "Entregado")
+        logger.info(f"Simulación {order_id}: Viajando por {wait_travel:.1f}s simulados")
+        
+        # Dividimos el viaje en pasos de actualización (ej. cada 3 segundos reales)
+        UPDATE_INTERVAL_REAL = 3.0 
+        steps = int(wait_travel / UPDATE_INTERVAL_REAL)
+        if steps < 1: steps = 1
+        
+        for i in range(1, steps + 1):
+            time.sleep(UPDATE_INTERVAL_REAL)
+            # Interpolación Lineal
+            fraction = i / steps
+            current_lat = RESTAURANT_LAT + (client_lat - RESTAURANT_LAT) * fraction
+            current_lon = RESTAURANT_LON + (client_lon - RESTAURANT_LON) * fraction
+            
+            process_order_status_update(order_id, "En camino", driver_location={"latitude": current_lat, "longitude": current_lon})
+            logger.info(f"Simulación {order_id}: Driver en {current_lat:.5f}, {current_lon:.5f}")
+
+        # Paso 5: Entregado
+        process_order_status_update(order_id, "Entregado", driver_location={"latitude": client_lat, "longitude": client_lon})
 
     except Exception as e:
         logger.error(f"Error en simulación del pedido {order_id}: {e}", exc_info=True)
@@ -371,11 +390,12 @@ async def update_order_status(order_id):
     try:
         data = request.get_json()
         nuevo_estado = data.get('status')
+        driver_location = data.get('driver_location') # Opcional
 
         if not nuevo_estado:
             return jsonify({"status": "error", "message": "El campo 'status' es requerido."}), 400
 
-        if process_order_status_update(order_id, nuevo_estado):
+        if process_order_status_update(order_id, nuevo_estado, driver_location):
              return jsonify({"status": "success", "order_id": order_id, "new_status": nuevo_estado})
         else:
              return jsonify({"status": "error", "message": "No se pudo actualizar el pedido."}), 500

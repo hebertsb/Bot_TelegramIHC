@@ -134,26 +134,38 @@ Cambia el estado de un pedido y notifica al cliente.
 *   **Método:** `GET`
 *   **Respuesta:** Lista de todos los pedidos almacenados en Firestore.
 
-### 2.3. Rastrear Pedido Individual
-Obtiene el estado actual y detalles de un pedido específico.
+### 2.3. Rastrear Pedido Individual (Polling)
+Para mostrar el estado en tiempo real en el Frontend (WebApp), se recomienda hacer **Polling**.
 
+*   **Estrategia:** Llamar a este endpoint cada 10-15 segundos.
 *   **Endpoint:** `/get_order/<order_id>`
 *   **Método:** `GET`
 *   **Respuesta (200 OK):**
     ```json
     {
         "id": "ORD-123456",
-        "status": "En camino",
+        "status": "En camino",  // <--- Usar esto para actualizar la UI
         "total": 150.50,
-        "items": [...],
-        "date": "...",
+        "driver_location": {    // <--- NUEVO: Ubicación del repartidor (si está disponible)
+            "latitude": -17.7835,
+            "longitude": -63.1822
+        },
         ...
     }
     ```
 
 ---
 
-## 3. Flujo de Notificaciones (Telegram)
+## 3. Flujo de Notificaciones (Automático)
+
+El usuario **NO** necesita hacer nada extra. El backend envía mensajes al chat del bot automáticamente cuando cambia el estado.
+
+1.  **Confirmación:** "✅ ¡Tu pedido ha sido confirmado!"
+2.  **Preparación:** "👨‍🍳 ¡Estamos preparando tu pedido!"
+3.  **En Camino:** "🛵 ¡Tu pedido ya está en camino!"
+4.  **Entregado:** "🎉 ¡Tu pedido ha sido entregado!"
+
+> **Nota:** Estos mensajes llegan como un mensaje normal de Telegram, haciendo vibrar/sonar el celular del cliente.
 
 El backend actúa como un puente entre la WebApp y el Chat de Telegram.
 
