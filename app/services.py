@@ -1,7 +1,7 @@
 import logging
 import firebase_admin
 from firebase_admin import credentials, firestore
-from config import FIREBASE_KEY_PATH
+from config import FIREBASE_CREDENTIALS
 
 # --- Configuración del Logging ---
 logger = logging.getLogger(__name__)
@@ -12,8 +12,8 @@ def _initialize_firebase():
     Esta es una función interna para ser llamada solo una vez.
     """
     try:
-        logger.info(f"Intentando inicializar Firebase con la clave: {FIREBASE_KEY_PATH}")
-        cred = credentials.Certificate(FIREBASE_KEY_PATH)
+        # logger.info(f"Intentando inicializar Firebase...") # Evitar loguear credenciales si es un dict
+        cred = credentials.Certificate(FIREBASE_CREDENTIALS)
         firebase_admin.initialize_app(cred)
         db_client = firestore.client()
         logger.info("¡Conexión con Firebase establecida exitosamente!")

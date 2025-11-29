@@ -12,11 +12,16 @@ from asgiref.wsgi import WsgiToAsgi
 
 logger = logging.getLogger(__name__)
 
+import os
+
+# ... imports ...
+
 def run_flask():
     """Corre el servidor web Flask usando Uvicorn (compatible con async)"""
-    logger.info("Iniciando servidor Flask (Uvicorn) en http://0.0.0.0:5000")
+    port = int(os.environ.get("PORT", 5000))
+    logger.info(f"Iniciando servidor Flask (Uvicorn) en http://0.0.0.0:{port}")
     asgi_app = WsgiToAsgi(app)
-    config = uvicorn.Config(asgi_app, host="0.0.0.0", port=5000, log_level="info")
+    config = uvicorn.Config(asgi_app, host="0.0.0.0", port=port, log_level="info")
     server = uvicorn.Server(config)
     server.run()
 
