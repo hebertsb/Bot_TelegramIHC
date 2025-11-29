@@ -273,70 +273,70 @@ products = {
             "id": "adic-1",
             "name": "Extra Queso Mozzarella",
             "description": "Porción adicional de queso mozzarella para tu pizza.",
-            "price": 69.00,
+            "price": 10.00,
             "emoji": "🧀"
         },
         {
             "id": "adic-2",
             "name": "Borde Relleno de Queso",
             "description": "Transforma tu pizza con un delicioso borde relleno de queso.",
-            "price": 104.00,
+            "price": 15.00,
             "emoji": "🥖"
         },
         {
             "id": "adic-3",
             "name": "Extra Pepperoni",
             "description": "Más rodajas de pepperoni para los amantes de este ingrediente.",
-            "price": 83.00,
+            "price": 12.00,
             "emoji": "🍕"
         },
         {
             "id": "adic-4",
             "name": "Extra Champiñones",
             "description": "Champiñones frescos adicionales.",
-            "price": 55.00,
+            "price": 8.00,
             "emoji": "🍄"
         },
         {
             "id": "adic-5",
             "name": "Extra Jamón",
             "description": "Porción adicional de jamón premium.",
-            "price": 69.00,
+            "price": 10.00,
             "emoji": "🥓"
         },
         {
             "id": "adic-6",
             "name": "Extra Aceitunas",
             "description": "Aceitunas negras adicionales.",
-            "price": 41.00,
+            "price": 6.00,
             "emoji": "🫒"
         },
         {
             "id": "adic-7",
             "name": "Extra Piña",
             "description": "Más piña dulce para tu pizza hawaiana.",
-            "price": 48.00,
+            "price": 7.00,
             "emoji": "🍍"
         },
         {
             "id": "adic-8",
             "name": "Salsa Picante Extra",
             "description": "Porción de salsa picante casera para acompañar.",
-            "price": 21.00,
+            "price": 3.00,
             "emoji": "🌶️"
         },
         {
             "id": "adic-9",
             "name": "Salsa Ranch",
             "description": "Deliciosa salsa ranch para mojar tu pizza.",
-            "price": 24.00,
+            "price": 5.00,
             "emoji": "🥛"
         },
         {
             "id": "adic-10",
             "name": "Pan de Ajo (6 piezas)",
             "description": "Pan de ajo tostado con mantequilla y hierbas.",
-            "price": 35.00,
+            "price": 18.00,
             "emoji": "🥖"
         }
     ]
