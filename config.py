@@ -11,6 +11,11 @@ BOT_TOKEN = os.environ.get("BOT_TOKEN")
 WEB_APP_URL = os.environ.get("WEB_APP_URL")
 IMAGE_URL = "https://i.postimg.cc/vmTx9Lsc/Gemini-Generated-Image-msl551msl551msl5.png"
 
+# --- WEBHOOK CONFIG ---
+WEBHOOK_URL = os.environ.get("WEBHOOK_URL") # URL pública (ej. Railway o ngrok)
+WEBHOOK_PATH = f"/webhook/{BOT_TOKEN}"
+WEBHOOK_SECRET_TOKEN = os.environ.get("WEBHOOK_SECRET_TOKEN", "my-secret-token")
+
 # --- ID del Restaurante/Tienda ---
 RESTAURANT_CHAT_ID = os.environ.get("RESTAURANT_CHAT_ID")
 
