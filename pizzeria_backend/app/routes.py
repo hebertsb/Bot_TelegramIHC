@@ -5,11 +5,11 @@ import json
 import google.generativeai as genai
 from flask import request, jsonify, render_template_string
 from datetime import datetime
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 
 # Importaciones de tu aplicación
 from app import app
-from config import RESTAURANT_CHAT_ID, GEMINI_API_KEY
+from config import RESTAURANT_CHAT_ID, GEMINI_API_KEY, WEBHOOK_PATH, WEBHOOK_SECRET_TOKEN
 from app.services import guardar_pedido_en_firestore, obtener_pedido_por_id, actualizar_estado_pedido, obtener_todos_los_pedidos
 from app.menu_data import products
 
@@ -184,6 +184,39 @@ def generate_invoice_html(order):
 @app.route('/')
 def index():
     return "¡El servidor Backend de Pizzería está funcionando!"
+
+@app.route(WEBHOOK_PATH, methods=['POST'])
+async def telegram_webhook():
+    """
+    Webhook endpoint que recibe updates de Telegram.
+    Telegram enviará los updates aquí en lugar de usar polling.
+    """
+    try:
+        # Validar token secreto
+        secret_token = request.headers.get('X-Telegram-Bot-Api-Secret-Token')
+        if secret_token != WEBHOOK_SECRET_TOKEN:
+            logger.warning("Intento de webhook con token inválido")
+            return jsonify({"status": "error", "message": "Token inválido"}), 401
+
+        # Obtener el update de Telegram
+        data = request.get_json()
+        if not data:
+            return jsonify({"status": "error"}), 400
+
+        # Procesar el update
+        update = Update.de_json(data, telegram_service.bot)
+        
+        if update:
+            logger.info(f"Update recibido del webhook: {update.update_id}")
+            # Procesar el update con la aplicación del bot
+            if telegram_service.application:
+                await telegram_service.application.process_update(update)
+        
+        return jsonify({"status": "ok"}), 200
+
+    except Exception as e:
+        logger.error(f"Error en webhook de Telegram: {e}", exc_info=True)
+        return jsonify({"status": "error"}), 500
 
 @app.route('/get_products', methods=['GET'])
 def get_products():

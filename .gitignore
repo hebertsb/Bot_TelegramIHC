@@ -2,6 +2,7 @@
 *.json
 
 # Entorno virtual de Python
+/env/
 /venv/
 
 # Archivos de cache de Python
