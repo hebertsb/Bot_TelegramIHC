@@ -55,7 +55,7 @@ GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 RESTAURANT_LOCATION = {
   "latitude": -17.7832662,
   "longitude": -63.1820985,
-  "name": "Plaza 24 de Septiembre"
+  "name": "Pizzería Nova"
 }
 
 # Versión desplazada para visualización en mapa (evita superposición exacta)
