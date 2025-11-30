@@ -1,4 +1,3 @@
-# app/routes.py
 import logging
 import asyncio
 import json
@@ -227,207 +226,10 @@ def generate_invoice_html(order):
                 Gracias por tu pedido. Este documento es un comprobante de venta simplificado.
             </p>
         </div>
-        self.loop = loop
-        logger.info("El servicio de Telegram ha sido configurado exitosamente.")
-
-    def send_message(self, chat_id, text, parse_mode='HTML', reply_markup=None):
-        """Envía un mensaje de forma segura en el loop de eventos del bot."""
-        if not self.loop or not self.bot:
-            logger.warning("El bot o el loop de eventos no están disponibles. No se puede enviar el mensaje.")
-            return
-
-        coro = self.bot.send_message(
-            chat_id=chat_id,
-            text=text,
-            parse_mode=parse_mode,
-            reply_markup=reply_markup
-        )
-        asyncio.run_coroutine_threadsafe(coro, self.loop)
-
-# --- Instancia del Servicio de Telegram ---
-# Se crea una instancia vacía que será configurada en run.py
-telegram_service = TelegramService()
-
-def generate_telegram_invoice_text(order):
-    """Genera el texto de la factura para ser enviado por Telegram."""
-    currency = order.get('currency', 'Bs')
-    
-    items_list = []
-    for item in order.get('items', []):
-        item_total = item['price'] * item['quantity']
-        # Usamos formato de ancho fijo simple con `ljust` para alinear
-        name_part = f"{item.get('emoji', '🍕')} {item['name']}"
-        price_part = f"x{item['quantity']} ... {currency} {item_total:.2f}"
-        items_list.append(f"<code>{name_part.ljust(20)} {price_part}</code>")
-    
-    items_text = "\n".join(items_list)
-    
-    address_text = order.get('address', 'No especificada')
-    if not address_text and order.get('location'):
-        location = order['location']
-        address_text = f"Lat: {location.get('latitude')}, Lon: {location.get('longitude')}"
-
-    # Formatear fecha con zona horaria de Bolivia
-    date_ts = order.get('date_ts')
-    date_str = order.get('date')
-    
-    try:
-        if isinstance(date_ts, (int, float)):
-             # Si viene timestamp en ms
-            dt_utc = datetime.fromtimestamp(date_ts / 1000, tz=pytz.utc)
-        elif date_str:
-             # Si viene string ISO
-            dt_utc = datetime.fromisoformat(date_str.replace('Z', '+00:00'))
-        else:
-            dt_utc = datetime.now(pytz.utc)
-
-        # Convertir a America/La_Paz
-        bolivia_tz = pytz.timezone('America/La_Paz')
-        dt_local = dt_utc.astimezone(bolivia_tz)
-        date_formatted = dt_local.strftime("%d/%m/%Y %H:%M")
-    except Exception as e:
-        logger.error(f"Error formateando fecha: {e}")
-        date_formatted = "Fecha desconocida"
-
-    # Datos del Cliente
-    customer_name = order.get('customer_name', 'Cliente')
-    customer_nit = order.get('customer_nit', 'S/N')
-    customer_phone = order.get('customer_phone', 'No registrado')
-
-    invoice_text = (
-        f"<b>🍕 Pizzeria Nova - Factura 🍕</b>\n\n"
-        f"¡Gracias por tu pedido! Lo hemos recibido y ya está en marcha.\n\n"
-        f"<b>Factura N°:</b> <code>{order.get('id')}</code>\n"
-        f"<b>Fecha:</b> {date_formatted}\n"
-        f"<b>Estado:</b> {order.get('status', 'Confirmado')}\n"
-        f"━━━━━━━━━━━━━━━━━━\n"
-        f"<b>DATOS DEL CLIENTE:</b>\n"
-        f"<b>Nombre:</b> {customer_name}\n"
-        f"<b>NIT/CI:</b> {customer_nit}\n"
-        f"<b>Teléfono:</b> {customer_phone}\n"
-        f"━━━━━━━━━━━━━━━━━━\n"
-        f"<b>DETALLES DEL PEDIDO:</b>\n"
-        f"{items_text}\n"
-        f"━━━━━━━━━━━━━━━━━━\n"
-        f"<b>Total a Pagar: {currency} {order.get('total', 0):.2f}</b>\n\n"
-        f"<b>Dirección de Entrega:</b>\n"
-        f"<i>{address_text}</i>\n\n"
-        f"<b>Método de Pago:</b> {order.get('paymentMethod')}\n\n"
-        f"Te mantendremos informado sobre el estado de tu pedido."
-    )
-    return invoice_text
-
-
-# Función auxiliar para generar el HTML de la factura (para reutilizar)
-def generate_invoice_html(order):
-    """Genera una factura simple en HTML"""
-    currency = order.get('currency', 'Bs')
-    
-    # Función para formatear ítems de la factura
-    items_html = ""
-    for item in order.get('items', []):
-        total_item = item['price'] * item['quantity']
-        items_html += f"""
-        <tr>
-            <td style="text-align: left; padding: 8px 0;">{item['name']} ({item.get('emoji', '🍕')})</td>
-            <td style="text-align: center;">{item['quantity']}</td>
-            <td style="text-align: right;">{currency} {item['price']:.2f}</td>
-            <td style="text-align: right;">{currency} {total_item:.2f}</td>
-        </tr>
-        """
-
-    # Formatear fecha con zona horaria de Bolivia
-    date_ts = order.get('date_ts')
-    date_str = order.get('date')
-    
-    try:
-        if isinstance(date_ts, (int, float)):
-             # Si viene timestamp en ms
-            dt_utc = datetime.fromtimestamp(date_ts / 1000, tz=pytz.utc)
-        elif date_str:
-             # Si viene string ISO
-            dt_utc = datetime.fromisoformat(date_str.replace('Z', '+00:00'))
-        else:
-            dt_utc = datetime.now(pytz.utc)
-
-        # Convertir a America/La_Paz
-        bolivia_tz = pytz.timezone('America/La_Paz')
-        dt_local = dt_utc.astimezone(bolivia_tz)
-        invoice_date = dt_local.strftime("%d/%m/%Y %H:%M:%S")
-    except Exception as e:
-        logger.error(f"Error formateando fecha HTML: {e}")
-        invoice_date = "Fecha desconocida"
-
-    # Datos del Cliente
-    customer_name = order.get('customer_name', 'Cliente')
-    customer_nit = order.get('customer_nit', 'S/N')
-    customer_phone = order.get('customer_phone', 'No registrado')
-
-    # Estilo de la factura (se recomienda usar estilos inline para PDFs)
-    html_content = f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>Factura Pizzeria Nova #{order['id']}</title>
-        <style>
-            body {{ font-family: sans-serif; margin: 20px; }}
-            .container {{ max-width: 600px; margin: auto; padding: 20px; border: 1px solid #ddd; box-shadow: 0 0 10px rgba(0,0,0,0.1); }}
-            h1 {{ color: #E94E1B; text-align: center; border-bottom: 2px solid #ddd; padding-bottom: 10px; }}
-            table {{ width: 100%; border-collapse: collapse; margin-top: 20px; }}
-            th, td {{ border-bottom: 1px solid #eee; padding: 8px; }}
-            th {{ background-color: #f5f5f5; text-align: left; }}
-            .summary-table td {{ border: none; font-weight: bold; }}
-            .total-row td {{ border-top: 2px solid #333; font-size: 1.2em; }}
-            .client-info {{ background-color: #f9f9f9; padding: 10px; border-radius: 5px; margin-bottom: 20px; }}
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <h1>🍕 Factura Pizzeria Nova</h1>
-            
-            <div class="client-info">
-                <p><strong>Factura N°:</strong> {order['id']}</p>
-                <p><strong>Fecha/Hora:</strong> {invoice_date}</p>
-                <p><strong>Cliente:</strong> {customer_name}</p>
-                <p><strong>NIT/CI:</strong> {customer_nit}</p>
-                <p><strong>Teléfono:</strong> {customer_phone}</p>
-            </div>
-
-            <p><strong>Dirección de Entrega:</strong> {order.get('address', 'No especificada')}</p>
-            <p><strong>Método de Pago:</strong> {order['paymentMethod']}</p>
-            
-            <table>
-                <thead>
-                    <tr>
-                        <th>Producto</th>
-                        <th style="text-align: center;">Cant.</th>
-                        <th style="text-align: right;">Precio Unit.</th>
-                        <th style="text-align: right;">Total Item</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {items_html}
-                </tbody>
-            </table>
-
-            <table class="summary-table" style="margin-top: 20px; float: right; width: 50%;">
-                <tr class="total-row">
-                    <td>Total a Pagar:</td>
-                    <td style="text-align: right;">{currency} {order.get('total', 0):.2f}</td>
-                </tr>
-            </table>
-            <div style="clear: both;"></div>
-            
-            <p style="text-align: center; margin-top: 30px; font-size: 0.8em; color: #777;">
-                Gracias por tu pedido. Este documento es un comprobante de venta simplificado.
-            </p>
-        </div>
     </body>
     </html>
     """
     return html_content
-
-# ... (resto de endpoints)
 
 @app.route('/')
 def index():
@@ -601,7 +403,7 @@ def run_order_simulation(order_id):
         logger.error(f"Error en simulación del pedido {order_id}: {e}", exc_info=True)
 
 @app.route('/update_status/<string:order_id>', methods=['POST'])
-def update_order_status():
+def update_order_status(order_id):
     """
     Endpoint para que un sistema externo (ej. un panel de admin) actualice el estado de un pedido.
     """
