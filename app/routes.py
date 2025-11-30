@@ -438,27 +438,6 @@ def update_order_status(order_id):
         logger.info(f"Recibida petición de actualización para {order_id}. Payload: {data}")
         
         nuevo_estado = data.get('status')
-        driver_location = data.get('driver_location') # Opcional
-
-        if not nuevo_estado:
-            return jsonify({"status": "error", "message": "El campo 'status' es requerido."}), 400
-
-        if process_order_status_update(order_id, nuevo_estado, driver_location):
-             # Si el nuevo estado es "Repartidor Asignado", iniciamos la simulación del viaje
-             if nuevo_estado == "Repartidor Asignado":
-                 try:
-                    simulation_thread = threading.Thread(target=run_order_simulation, args=(order_id,))
-                    simulation_thread.daemon = True
-                    simulation_thread.start()
-                    logger.info(f"Simulación de viaje iniciada para {order_id} tras asignación de repartidor.")
-                 except Exception as e_sim:
-                    logger.error(f"Error al iniciar simulación para {order_id}: {e_sim}")
-
-             return jsonify({"status": "success", "order_id": order_id, "new_status": nuevo_estado})
-        else:
-             # Si falla process_order_status_update, es porque falló la BD o no existe el pedido.
-             # La notificación fallida YA está manejada dentro y no retorna False.
-             return jsonify({"status": "error", "message": "No se pudo actualizar el pedido (Error BD o ID inválido)."}), 500
 
     except Exception as e:
         logger.error(f"Error NO CONTROLADO en /update_status/{order_id}: {e}", exc_info=True)
