@@ -526,6 +526,14 @@ def submit_order():
         else:
             logger.info("Pedido recibido sin ubicación (location)")
 
+        # Generar ID si no existe (Robustez)
+        if 'id' not in order:
+            import random
+            random_suffix = random.randint(1000, 9999)
+            generated_id = f"ORD-{int(time.time())}-{random_suffix}"
+            order['id'] = generated_id
+            logger.warning(f"Pedido recibido sin ID. Se generó uno automático: {generated_id}")
+
         logger.info(f"Nuevo pedido recibido del chat_id: {chat_id}")
         logger.info(f"Datos del pedido a guardar: {order}")
 
