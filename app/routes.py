@@ -502,7 +502,29 @@ def submit_order():
             logger.warning(f"El campo 'order' no es un dict: {type(order)}")
             return jsonify({"status": "error", "message": "El campo 'order' debe ser un objeto JSON."}), 400
 
-        order['chat_id'] = chat_id 
+
+        order['chat_id'] = chat_id
+
+        # Validar y procesar ubicación
+        location = order.get('location')
+        if location:
+            # Si la ubicación viene como string, intenta convertirla a dict
+            if isinstance(location, str):
+                try:
+                    location = json.loads(location)
+                    order['location'] = location
+                except Exception as e:
+                    logger.warning(f"No se pudo convertir location a dict: {location} - {e}")
+            # Si la ubicación es dict, verifica que tenga lat/lng
+            if isinstance(location, dict):
+                lat = location.get('lat')
+                lng = location.get('lng')
+                if lat is None or lng is None:
+                    logger.warning(f"Ubicación incompleta: {location}")
+            else:
+                logger.warning(f"Formato de ubicación no reconocido: {location}")
+        else:
+            logger.info("Pedido recibido sin ubicación (location)")
 
         logger.info(f"Nuevo pedido recibido del chat_id: {chat_id}")
         logger.info(f"Datos del pedido a guardar: {order}")
@@ -514,8 +536,8 @@ def submit_order():
                 logger.error("guardar_pedido_en_firestore devolvió False")
                 return jsonify({"status": "error", "message": "Error al guardar en la base de datos (Firebase no conectó)"}), 500
         except Exception as e_db:
-             logger.error(f"Excepción al llamar guardar_pedido_en_firestore: {e_db}", exc_info=True)
-             return jsonify({"status": "error", "message": "Excepción al guardar en BD."}), 500
+            logger.error(f"Excepción al llamar guardar_pedido_en_firestore: {e_db}", exc_info=True)
+            return jsonify({"status": "error", "message": "Excepción al guardar en BD."}), 500
         
         # 2. Notificar al Cliente con la Factura detallada
         try:
