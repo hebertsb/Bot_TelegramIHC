@@ -502,11 +502,17 @@ async def submit_order():
         order['chat_id'] = chat_id 
 
         logger.info(f"Nuevo pedido recibido del chat_id: {chat_id}")
+        logger.info(f"Datos del pedido a guardar: {order}")
 
         # 1. Guardar en la Base de Datos
-        exito_db = guardar_pedido_en_firestore(order)
-        if not exito_db:
-            return jsonify({"status": "error", "message": "Error al guardar en la base de datos (Firebase no conectó)"}), 500
+        try:
+            exito_db = guardar_pedido_en_firestore(order)
+            if not exito_db:
+                logger.error("guardar_pedido_en_firestore devolvió False")
+                return jsonify({"status": "error", "message": "Error al guardar en la base de datos (Firebase no conectó)"}), 500
+        except Exception as e_db:
+             logger.error(f"Excepción al llamar guardar_pedido_en_firestore: {e_db}", exc_info=True)
+             return jsonify({"status": "error", "message": "Excepción al guardar en BD."}), 500
         
         # 2. Notificar al Cliente con la Factura detallada
         try:
