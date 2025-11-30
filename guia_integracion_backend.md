@@ -173,7 +173,28 @@ Para mostrar el estado en tiempo real en el Frontend.
 
 *   **Endpoint:** `/get_order/<order_id>`
 *   **Método:** `GET`
-*   **Respuesta:** Incluye `status` y `driver_location` si está disponible.
+*   **Respuesta:** Incluye `status`, `driver_location` y **`restaurant_location`**.
+    ```json
+    {
+        "id": "ORD-123",
+        "status": "En camino",
+        "driver_location": {
+            "latitude": -17.7835,
+            "longitude": -63.1822
+        },
+        "restaurant_location": {
+            "latitude": -17.7832662,
+            "longitude": -63.1820985,
+            "name": "Plaza 24 de Septiembre"
+        },
+        "restaurant_map_location": {
+            "latitude": -17.7836162,
+            "longitude": -63.1814985
+        }
+    }
+    ```
+    > [!IMPORTANT]
+    > **Ubicación del Restaurante:** El Frontend debe usar `restaurant_location` (o `restaurant_map_location` para evitar superposición en el mapa) que viene en esta respuesta como la **Fuente de Verdad** para pintar el marcador del restaurante, en lugar de tener coordenadas harcodeadas.
 
 ---
 
