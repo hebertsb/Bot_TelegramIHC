@@ -509,49 +509,60 @@ async def submit_order():
             return jsonify({"status": "error", "message": "Error al guardar en la base de datos (Firebase no conectó)"}), 500
         
         # 2. Notificar al Cliente con la Factura detallada
-        invoice_text = generate_telegram_invoice_text(order)
-        invoice_url = f"{request.host_url}factura/{order.get('id')}"
-        
-        keyboard = [[
-            InlineKeyboardButton("Ver Factura Web 🧾", url=invoice_url)
-        ]]
-        reply_markup = InlineKeyboardMarkup(keyboard)
+        try:
+            if chat_id == "LOCAL_TEST":
+                logger.info(f"Omitiendo notificación Telegram para chat_id de prueba: {chat_id}")
+            else:
+                invoice_text = generate_telegram_invoice_text(order)
+                invoice_url = f"{request.host_url}factura/{order.get('id')}"
+                
+                keyboard = [[
+                    InlineKeyboardButton("Ver Factura Web 🧾", url=invoice_url)
+                ]]
+                reply_markup = InlineKeyboardMarkup(keyboard)
 
-        # Usamos el servicio para notificar al cliente
-        telegram_service.send_message(
-            chat_id=chat_id, 
-            text=invoice_text, 
-            reply_markup=reply_markup
-        )
-        
-        # 3. Notificar al Restaurante (Alerta)
-        # Usamos Bs en lugar de $
-        items_summary = "\n".join([f"  - {item['name']} (x{item['quantity']}) - Bs {item['price'] * item['quantity']:.2f}" for item in order.get('items', [])])
-        address_text = order.get('address', f"Coords: {order.get('location', 'N/A')}")
-        
-        # Datos del cliente para el restaurante
-        customer_name = order.get('customer_name', 'Cliente')
-        customer_phone = order.get('customer_phone', 'No registrado')
-        
-        restaurant_alert = (
-            f"<b>¡NUEVO PEDIDO!</b> - #{order.get('id')}\n"
-            f"<b>Cliente:</b> {customer_name} (ID: {chat_id})\n"
-            f"<b>Teléfono:</b> {customer_phone}\n"
-            f"<b>Total:</b> Bs {order.get('total')}\n"
-            f"<b>Dirección:</b> {address_text}\n"
-            f"<b>Items:</b>\n{items_summary}"
-        )
-        # Usamos el servicio para notificar al restaurante
-        telegram_service.send_message(
-            chat_id=RESTAURANT_CHAT_ID, 
-            text=restaurant_alert
-        )
+                # Usamos el servicio para notificar al cliente
+                telegram_service.send_message(
+                    chat_id=chat_id, 
+                    text=invoice_text, 
+                    reply_markup=reply_markup
+                )
+                
+                # 3. Notificar al Restaurante (Alerta)
+                # Usamos Bs en lugar de $
+                items_summary = "\n".join([f"  - {item['name']} (x{item['quantity']}) - Bs {item['price'] * item['quantity']:.2f}" for item in order.get('items', [])])
+                address_text = order.get('address', f"Coords: {order.get('location', 'N/A')}")
+                
+                # Datos del cliente para el restaurante
+                customer_name = order.get('customer_name', 'Cliente')
+                customer_phone = order.get('customer_phone', 'No registrado')
+                
+                restaurant_alert = (
+                    f"<b>¡NUEVO PEDIDO!</b> - #{order.get('id')}\n"
+                    f"<b>Cliente:</b> {customer_name} (ID: {chat_id})\n"
+                    f"<b>Teléfono:</b> {customer_phone}\n"
+                    f"<b>Total:</b> Bs {order.get('total')}\n"
+                    f"<b>Dirección:</b> {address_text}\n"
+                    f"<b>Items:</b>\n{items_summary}"
+                )
+                # Usamos el servicio para notificar al restaurante
+                telegram_service.send_message(
+                    chat_id=RESTAURANT_CHAT_ID, 
+                    text=restaurant_alert
+                )
+        except Exception as e_notify:
+            logger.error(f"Error al enviar notificaciones para pedido {order.get('id')}: {e_notify}", exc_info=True)
+            # No retornamos error 500, porque el pedido YA se guardó en la BD.
+            # Solo logueamos el error.
 
         # 4. Iniciar Simulación de Estados (DEMO)
         # Esto cambiará el estado automáticamente cada X segundos
-        simulation_thread = threading.Thread(target=run_order_simulation, args=(order.get('id'),))
-        simulation_thread.daemon = True # Para que no bloquee el cierre del server
-        simulation_thread.start()
+        try:
+            simulation_thread = threading.Thread(target=run_order_simulation, args=(order.get('id'),))
+            simulation_thread.daemon = True # Para que no bloquee el cierre del server
+            simulation_thread.start()
+        except Exception as e_sim:
+             logger.error(f"Error al iniciar simulación para {order.get('id')}: {e_sim}")
 
         return jsonify({"status": "success", "order_id": order.get('id')})
 
