@@ -13,8 +13,8 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 # Importaciones de tu aplicación
 from app import app
-from config import RESTAURANT_CHAT_ID, GEMINI_API_KEY
-from app.services import guardar_pedido_en_firestore, obtener_pedido_por_id, actualizar_estado_pedido, obtener_todos_los_pedidos
+from config import RESTAURANT_CHAT_ID, GEMINI_API_KEY, RESTAURANT_LOCATION, RESTAURANT_MAP_LOCATION
+from app.services import guardar_pedido_en_firestore, obtener_pedido_por_id, actualizar_estado_pedido, obtener_todos_los_pedidos, actualizar_ubicacion_conductor, obtener_conductores_activos, asignar_pedido_a_conductor
 from app.menu_data import products
 
 logger = logging.getLogger(__name__)
@@ -438,6 +438,14 @@ def update_order_status(order_id):
         logger.info(f"Recibida petición de actualización para {order_id}. Payload: {data}")
         
         nuevo_estado = data.get('status')
+        
+        if not nuevo_estado:
+             return jsonify({"status": "error", "message": "Falta el campo 'status'"}), 400
+
+        if process_order_status_update(order_id, nuevo_estado):
+             return jsonify({"status": "success"})
+        else:
+             return jsonify({"status": "error", "message": "No se pudo actualizar el estado"}), 500
 
     except Exception as e:
         logger.error(f"Error NO CONTROLADO en /update_status/{order_id}: {e}", exc_info=True)
@@ -466,6 +474,11 @@ def get_order(order_id):
         order = obtener_pedido_por_id(order_id)
         if not order:
             return jsonify({"status": "error", "message": "Pedido no encontrado"}), 404
+        
+        # Inyectar la ubicación del restaurante (Fuente de Verdad)
+        order['restaurant_location'] = RESTAURANT_LOCATION
+        order['restaurant_map_location'] = RESTAURANT_MAP_LOCATION
+        
         return jsonify(order)
     except Exception as e:
         logger.error(f"Error en /get_order/{order_id}: {e}", exc_info=True)
@@ -587,12 +600,16 @@ def submit_order():
                 )
         except Exception as e_notify:
             logger.error(f"Error al enviar notificaciones para pedido {order.get('id')}: {e_notify}", exc_info=True)
-            # No retornamos error 500, porque el pedido YA se guardó en la BD.
-            # Solo logueamos el error.
 
-        # 4. Iniciar Simulación de Estados (DEMO)
-        # YA NO iniciamos la simulación aquí automáticamente.
-        # Se iniciará cuando el repartidor acepte el pedido (update_status -> Repartidor Asignado)
+        # 4. Asignación Automática de Conductor
+        try:
+            drivers = obtener_conductores_activos()
+            if drivers:
+                driver = drivers[0]
+                asignar_pedido_a_conductor(order.get('id'), driver['id'])
+                logger.info(f"Pedido asignado automáticamente al conductor {driver['id']}")
+        except Exception as e_assign:
+            logger.error(f"Error en asignación automática: {e_assign}")
 
         return jsonify({"status": "success", "order_id": order.get('id')})
 
@@ -710,3 +727,108 @@ async def reverse_geocode():
     except Exception as e:
         logger.error(f"Error inesperado en /reverse_geocode: {e}", exc_info=True)
         return jsonify({"error": "Error interno del servidor."}), 500
+
+# --- Endpoints para Conductores (Delivery App) ---
+
+@app.route('/driver/location', methods=['POST'])
+def update_driver_location_endpoint():
+    """
+    Recibe la ubicación del conductor (Fake GPS) y actualiza en Firestore.
+    Payload: { "driver_id": "D1", "latitude": -17.x, "longitude": -63.x }
+    """
+    try:
+        data = request.get_json()
+        driver_id = data.get('driver_id')
+        lat = data.get('latitude')
+        lon = data.get('longitude')
+        
+        if not driver_id or lat is None or lon is None:
+            return jsonify({"status": "error", "message": "Faltan datos"}), 400
+            
+        success = actualizar_ubicacion_conductor(driver_id, lat, lon)
+        if success:
+            return jsonify({"status": "success"})
+        else:
+            return jsonify({"status": "error", "message": "Error al actualizar BD"}), 500
+    except Exception as e:
+        logger.error(f"Error en /driver/location: {e}")
+        return jsonify({"status": "error"}), 500
+
+@app.route('/driver/orders/<string:driver_id>', methods=['GET'])
+def get_driver_orders(driver_id):
+    """
+    Obtiene los pedidos asignados a un conductor específico.
+    """
+    try:
+        # Por simplicidad, buscamos en todos los pedidos. 
+        # En producción, haríamos una query filtrada en Firestore.
+        all_orders = obtener_todos_los_pedidos()
+        my_orders = [
+            o for o in all_orders 
+            if o.get('driver_id') == driver_id and o.get('status') not in ['Entregado', 'Cancelado']
+        ]
+        return jsonify(my_orders)
+    except Exception as e:
+        logger.error(f"Error en /driver/orders: {e}")
+        return jsonify({"status": "error"}), 500
+
+@app.route('/driver/accept', methods=['POST'])
+def driver_accept_order():
+    """
+    El conductor acepta el pedido asignado.
+    Payload: { "order_id": "ORD-123", "driver_id": "D1" }
+    """
+    try:
+        data = request.get_json()
+        order_id = data.get('order_id')
+        
+        # Cambiar estado a "Conductor en camino" (o similar)
+        # Para simplificar el flujo obligatorio: "En camino" (al restaurante) o "Repartidor Asignado"
+        # El flujo dice: Asignar -> Aceptar -> Recoger -> Entregar
+        
+        success = process_order_status_update(order_id, "Repartidor Asignado")
+        if success:
+            return jsonify({"status": "success"})
+        else:
+            return jsonify({"status": "error"}), 500
+    except Exception as e:
+        logger.error(f"Error en /driver/accept: {e}")
+        return jsonify({"status": "error"}), 500
+
+@app.route('/driver/pickup', methods=['POST'])
+def driver_pickup_order():
+    """
+    El conductor recoge el pedido del restaurante.
+    Payload: { "order_id": "ORD-123" }
+    """
+    try:
+        data = request.get_json()
+        order_id = data.get('order_id')
+        
+        success = process_order_status_update(order_id, "En camino")
+        if success:
+            return jsonify({"status": "success"})
+        else:
+            return jsonify({"status": "error"}), 500
+    except Exception as e:
+        logger.error(f"Error en /driver/pickup: {e}")
+        return jsonify({"status": "error"}), 500
+
+@app.route('/driver/deliver', methods=['POST'])
+def driver_deliver_order():
+    """
+    El conductor entrega el pedido al cliente.
+    Payload: { "order_id": "ORD-123" }
+    """
+    try:
+        data = request.get_json()
+        order_id = data.get('order_id')
+        
+        success = process_order_status_update(order_id, "Entregado")
+        if success:
+            return jsonify({"status": "success"})
+        else:
+            return jsonify({"status": "error"}), 500
+    except Exception as e:
+        logger.error(f"Error en /driver/deliver: {e}")
+        return jsonify({"status": "error"}), 500

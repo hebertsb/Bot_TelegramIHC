@@ -4,8 +4,8 @@ Esta documentación técnica describe el funcionamiento completo del backend des
 
 **Base URL (Producción):** `https://bottelegramihc-production.up.railway.app`
 
-> [!IMPORTANT]
-> **Modo Simulación Activo:** Para propósitos de demostración, cada nuevo pedido cambiará automáticamente de estado cada 15-20 segundos (Confirmado -> En preparación -> En camino -> Entregado). Esto permite probar el tracking en tiempo real sin intervención manual.
+> [!NOTE]
+> **Modo Simulación Desactivado:** La simulación automática de estados ha sido desactivada para permitir el control manual por parte de los repartidores a través de la App de Delivery. El flujo ahora depende de las interacciones reales del conductor.
 
 ---
 
@@ -39,7 +39,7 @@ Recupera el catálogo de productos organizado por categorías.
     ```
 
 ### 1.2. Enviar Pedido (Checkout)
-Procesa el pedido, lo guarda en Firebase y dispara las notificaciones.
+Procesa el pedido, lo guarda en Firebase y dispara las notificaciones. **Intenta asignar automáticamente un conductor disponible.**
 
 *   **Endpoint:** `/submit_order`
 *   **Método:** `POST`
@@ -76,9 +76,10 @@ Procesa el pedido, lo guarda en Firebase y dispara las notificaciones.
     }
     ```
 *   **Acciones del Backend al recibir esto:**
-    1.  Guarda el pedido completo (incluyendo los nuevos campos) en **Firestore**.
-    2.  Envía una **Factura (Texto + Botón)** al chat privado del cliente en Telegram.
-    3.  Envía una **Alerta de Nuevo Pedido** al chat del Restaurante.
+    1.  Guarda el pedido completo en **Firestore**.
+    2.  Envía una **Factura** al chat privado del cliente.
+    3.  Envía una **Alerta** al chat del Restaurante.
+    4.  **Asignación:** Busca conductores activos (`status="disponible"`) y asigna el pedido al primero encontrado (o al más cercano en futuras versiones).
 
 ### 1.3. Generar Idea de Pizza (IA)
 Usa Google Gemini para crear una pizza personalizada.
@@ -93,96 +94,94 @@ Renderiza una vista HTML de la factura.
 
 *   **Endpoint:** `/factura/<order_id>`
 *   **Método:** `GET`
-*   **Uso:** Este enlace se genera automáticamente y se envía al usuario por Telegram.
 
 ### 1.5. Geocodificación Inversa (Proxy)
-Convierte coordenadas (latitud/longitud) en una dirección legible. Úsalo para evitar problemas de CORS con Nominatim.
+Convierte coordenadas en dirección legible.
 
 *   **Endpoint:** `/reverse_geocode`
 *   **Método:** `GET`
-*   **Parámetros URL:** `?lat=-17.78&lon=-63.18`
-*   **Respuesta (200 OK):**
-    ```json
-    {
-        "display_name": "Calle Falsa 123, Santa Cruz de la Sierra, Bolivia",
-        "raw": { ... } // Datos crudos de Nominatim
-    }
-    ```
+*   **Parámetros:** `?lat=...&lon=...`
 
 ---
 
-## 2. Endpoints Administrativos (Gestión de Pedidos)
+## 2. Endpoints para Conductores (App Delivery)
 
-Estos endpoints permiten gestionar el ciclo de vida del pedido.
+Estos endpoints son exclusivos para la aplicación de los repartidores.
 
-### 2.1. Actualizar Estado del Pedido
+### 2.1. Actualizar Ubicación (Fake GPS)
+Envía la ubicación en tiempo real del conductor.
+
+*   **Endpoint:** `/driver/location`
+*   **Método:** `POST`
+*   **Payload:**
+    ```json
+    {
+        "driver_id": "D1",
+        "latitude": -17.7833,
+        "longitude": -63.1821
+    }
+    ```
+
+### 2.2. Obtener Mis Pedidos
+Obtiene los pedidos asignados a un conductor específico.
+
+*   **Endpoint:** `/driver/orders/<driver_id>`
+*   **Método:** `GET`
+*   **Respuesta:** Lista de objetos `order`.
+
+### 2.3. Aceptar Pedido
+El conductor confirma que realizará la entrega.
+
+*   **Endpoint:** `/driver/accept`
+*   **Método:** `POST`
+*   **Payload:** `{"order_id": "ORD-123", "driver_id": "D1"}`
+*   **Efecto:** Cambia estado a `Repartidor Asignado` y notifica al cliente.
+
+### 2.4. Recoger Pedido
+El conductor recoge el pedido del restaurante.
+
+*   **Endpoint:** `/driver/pickup`
+*   **Método:** `POST`
+*   **Payload:** `{"order_id": "ORD-123"}`
+*   **Efecto:** Cambia estado a `En camino` y notifica al cliente.
+
+### 2.5. Entregar Pedido
+El conductor entrega el pedido al cliente.
+
+*   **Endpoint:** `/driver/deliver`
+*   **Método:** `POST`
+*   **Payload:** `{"order_id": "ORD-123"}`
+*   **Efecto:** Cambia estado a `Entregado` y notifica al cliente.
+
+---
+
+## 3. Endpoints Administrativos (Gestión de Pedidos)
+
+### 3.1. Actualizar Estado del Pedido (Manual/Admin)
 Cambia el estado de un pedido y notifica al cliente.
 
 *   **Endpoint:** `/update_status/<order_id>`
 *   **Método:** `POST`
 *   **Payload:** `{"status": "Nuevo Estado"}`
-*   **Estados Soportados y Notificaciones:**
-    El backend reconoce estos estados y envía mensajes automáticos al cliente:
-    *   `"Confirmado"` -> "✅ ¡Tu pedido ha sido confirmado!"
-    *   `"En preparación"` -> "👨‍🍳 ¡Estamos preparando tu pedido!"
-    *   `"En camino"` -> "🛵 ¡Tu pedido ya está en camino!"
-    *   `"Entregado"` -> "🎉 ¡Tu pedido ha sido entregado!"
-    *   `"Cancelado"` -> "❌ Tu pedido ha sido cancelado."
 
-### 2.2. Obtener Todos los Pedidos
+### 3.2. Obtener Todos los Pedidos
 *   **Endpoint:** `/get_orders`
 *   **Método:** `GET`
-*   **Respuesta:** Lista de todos los pedidos almacenados en Firestore.
 
-### 2.3. Rastrear Pedido Individual (Polling)
-Para mostrar el estado en tiempo real en el Frontend (WebApp), se recomienda hacer **Polling**.
+### 3.3. Rastrear Pedido Individual (Polling)
+Para mostrar el estado en tiempo real en el Frontend.
 
-*   **Estrategia:** Llamar a este endpoint cada 10-15 segundos.
 *   **Endpoint:** `/get_order/<order_id>`
 *   **Método:** `GET`
-*   **Respuesta (200 OK):**
-    ```json
-    {
-        "id": "ORD-123456",
-        "status": "En camino",  // <--- Usar esto para actualizar la UI
-        "total": 150.50,
-        "driver_location": {    // <--- NUEVO: Ubicación del repartidor (si está disponible)
-            "latitude": -17.7835,
-            "longitude": -63.1822
-        },
-        ...
-    }
-    ```
+*   **Respuesta:** Incluye `status` y `driver_location` si está disponible.
 
 ---
 
-## 3. Flujo de Notificaciones (Automático)
-
-El usuario **NO** necesita hacer nada extra. El backend envía mensajes al chat del bot automáticamente cuando cambia el estado.
+## 4. Flujo de Notificaciones (Automático)
 
 1.  **Confirmación:** "✅ ¡Tu pedido ha sido confirmado!"
-2.  **Preparación:** "👨‍🍳 ¡Estamos preparando tu pedido!"
-3.  **En Camino:** "🛵 ¡Tu pedido ya está en camino!"
+2.  **Repartidor Asignado:** "🛵 ¡Un repartidor ha aceptado tu pedido!"
+3.  **En Camino:** "🚀 ¡Tu pedido ya está en camino!"
 4.  **Entregado:** "🎉 ¡Tu pedido ha sido entregado!"
 
-> **Nota:** Estos mensajes llegan como un mensaje normal de Telegram, haciendo vibrar/sonar el celular del cliente.
-
-El backend actúa como un puente entre la WebApp y el Chat de Telegram.
-
-1.  **Cliente -> WebApp:** El usuario arma su carrito y confirma.
-2.  **WebApp -> Backend (`/submit_order`):** Envía los datos JSON.
-3.  **Backend -> Telegram (Cliente):**
-    *   El bot envía inmediatamente un mensaje al usuario:
-        > **🍕 Pizzeria Nova - Factura 🍕**
-        > ...detalles del pedido...
-        > [Botón: Ver Factura Web 🧾]
-4.  **Backend -> Telegram (Restaurante):**
-    *   El bot envía una alerta al grupo/chat del restaurante con los detalles para preparar la orden.
-
----
-
-## 4. Notas para el Desarrollador Frontend
-
-*   **`chat_id` es vital:** Sin este campo en el JSON de `/submit_order`, el backend no sabrá a quién enviar la confirmación y fallará (o devolverá error 400). Asegúrate de obtenerlo del contexto de Telegram WebApp.
-*   **CORS:** Habilitado para cualquier origen (`*`), no deberías tener bloqueos.
-*   **Manejo de Errores:** Siempre verifica el `status` en la respuesta JSON. Si es `error`, muestra el `message` al usuario.
+El backend actúa como orquestador entre la WebApp, la App de Delivery y el Chat de Telegram.

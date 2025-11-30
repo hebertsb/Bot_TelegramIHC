@@ -49,3 +49,17 @@ else:
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
 
+
+# --- UBICACIÓN DEL RESTAURANTE ---
+# Coordenadas fijas para que Frontend y Driver App consuman la misma fuente de verdad.
+RESTAURANT_LOCATION = {
+  "latitude": -17.7832662,
+  "longitude": -63.1820985,
+  "name": "Plaza 24 de Septiembre"
+}
+
+# Versión desplazada para visualización en mapa (evita superposición exacta)
+RESTAURANT_MAP_LOCATION = {
+  "latitude": RESTAURANT_LOCATION["latitude"] - 0.00035,
+  "longitude": RESTAURANT_LOCATION["longitude"] + 0.0006
+}

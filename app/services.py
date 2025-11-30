@@ -133,3 +133,69 @@ def obtener_todos_los_pedidos():
         except Exception as e_inner:
             logger.error(f"Error crítico al obtener todos los pedidos (segundo intento): {e_inner}", exc_info=True)
             return []
+
+# --- Gestión de Conductores ---
+
+def actualizar_ubicacion_conductor(driver_id, lat, lon, status="disponible"):
+    """
+    Actualiza la ubicación y estado de un conductor en la colección 'drivers'.
+    """
+    if not db:
+        return False
+    
+    try:
+        doc_ref = db.collection('drivers').document(str(driver_id))
+        data = {
+            'id': driver_id,
+            'location': {'latitude': lat, 'longitude': lon},
+            'status': status,
+            'last_update': firestore.SERVER_TIMESTAMP
+        }
+        doc_ref.set(data, merge=True)
+        logger.info(f"Ubicación del conductor {driver_id} actualizada: {lat}, {lon}")
+        return True
+    except Exception as e:
+        logger.error(f"Error al actualizar conductor {driver_id}: {e}", exc_info=True)
+        return False
+
+def obtener_conductores_activos():
+    """
+    Obtiene lista de conductores que han actualizado su ubicación recientemente.
+    """
+    if not db:
+        return []
+        
+    try:
+        # En un caso real filtraríamos por tiempo (ej. últimos 5 min)
+        # Para la demo, traemos todos los que estén en estado 'disponible'
+        drivers_ref = db.collection('drivers').where('status', '==', 'disponible').stream()
+        drivers = [doc.to_dict() for doc in drivers_ref]
+        return drivers
+    except Exception as e:
+        logger.error(f"Error al obtener conductores activos: {e}", exc_info=True)
+        return []
+
+def asignar_pedido_a_conductor(order_id, driver_id):
+    """
+    Asigna un pedido a un conductor específico.
+    """
+    if not db:
+        return False
+        
+    try:
+        # 1. Actualizar el Pedido
+        order_ref = db.collection('pedidos').document(str(order_id))
+        order_ref.update({
+            'driver_id': driver_id,
+            'status': 'Repartidor Asignado'
+        })
+        
+        # 2. Actualizar el Conductor (Opcional: Marcarlo como ocupado)
+        # driver_ref = db.collection('drivers').document(str(driver_id))
+        # driver_ref.update({'status': 'ocupado'})
+        
+        logger.info(f"Pedido {order_id} asignado al conductor {driver_id}")
+        return True
+    except Exception as e:
+        logger.error(f"Error al asignar pedido {order_id} a conductor {driver_id}: {e}", exc_info=True)
+        return False
