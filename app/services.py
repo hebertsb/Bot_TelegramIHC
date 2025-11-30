@@ -1,7 +1,7 @@
 import logging
 import firebase_admin
 from firebase_admin import credentials, firestore
-from config import FIREBASE_KEY_PATH
+from config import FIREBASE_CREDENTIALS
 
 # --- Configuración del Logging ---
 logger = logging.getLogger(__name__)
@@ -12,8 +12,8 @@ def _initialize_firebase():
     Esta es una función interna para ser llamada solo una vez.
     """
     try:
-        logger.info(f"Intentando inicializar Firebase con la clave: {FIREBASE_KEY_PATH}")
-        cred = credentials.Certificate(FIREBASE_KEY_PATH)
+        # logger.info(f"Intentando inicializar Firebase...") # Evitar loguear credenciales si es un dict
+        cred = credentials.Certificate(FIREBASE_CREDENTIALS)
         firebase_admin.initialize_app(cred)
         db_client = firestore.client()
         logger.info("¡Conexión con Firebase establecida exitosamente!")
@@ -72,9 +72,10 @@ def obtener_pedido_por_id(order_id):
         logger.error(f"Error al obtener el pedido {order_id} de Firestore: {e}", exc_info=True)
         return None
 
-def actualizar_estado_pedido(order_id, nuevo_estado):
+def actualizar_estado_pedido(order_id, nuevo_estado, driver_location=None):
     """
     Actualiza el estado de un pedido en Firestore.
+    Opcionalmente actualiza la ubicación del repartidor.
     """
     if not db:
         logger.error("No se puede actualizar el estado: La conexión con Firebase no está disponible.")
@@ -84,8 +85,17 @@ def actualizar_estado_pedido(order_id, nuevo_estado):
         logger.info(f"Actualizando estado del pedido {order_id} a '{nuevo_estado}'")
         doc_ref = db.collection('pedidos').document(str(order_id))
         
-        # Usamos update para modificar solo el campo 'status'
-        doc_ref.update({'status': nuevo_estado})
+        update_data = {'status': nuevo_estado}
+        
+        # Si hay ubicación del repartidor, la agregamos
+        if driver_location:
+            import time
+            update_data['driver_location'] = driver_location
+            update_data['driver_updated_at'] = int(time.time() * 1000) # Timestamp en ms
+            logger.info(f"Actualizando ubicación del driver para {order_id}: {driver_location}")
+
+        # Usamos update para modificar solo los campos necesarios
+        doc_ref.update(update_data)
         
         logger.info(f"Estado del pedido {order_id} actualizado exitosamente.")
         return True

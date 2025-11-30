@@ -14,6 +14,7 @@ from app.bot import get_bot_handlers
 from app.routes import telegram_service
 from config import BOT_TOKEN, WEBHOOK_URL, WEBHOOK_PATH, WEBHOOK_SECRET_TOKEN
 from asgiref.wsgi import WsgiToAsgi
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -72,9 +73,10 @@ def start_ngrok():
 
 def run_flask():
     """Corre el servidor web Flask usando Uvicorn (compatible con async)"""
-    logger.info("Iniciando servidor Flask (Uvicorn) en http://0.0.0.0:5000")
+    port = int(os.environ.get("PORT", 5000))
+    logger.info(f"Iniciando servidor Flask (Uvicorn) en http://0.0.0.0:{port}")
     asgi_app = WsgiToAsgi(app)
-    config = uvicorn.Config(asgi_app, host="0.0.0.0", port=5000, log_level="info")
+    config = uvicorn.Config(asgi_app, host="0.0.0.0", port=port, log_level="info")
     server = uvicorn.Server(config)
     server.run()
 
@@ -147,10 +149,28 @@ async def run_telegram_bot_polling():
     logger.info("Iniciando bot de Telegram (POLLING - modo fallback)...")
     await application.initialize()
     await application.start()
+    
+    # Configurar los comandos del bot ANTES de iniciar polling
+    try:
+        from telegram import BotCommand
+        commands = [
+            BotCommand("start", "Iniciar el bot"),
+            BotCommand("menu", "Abrir el menú del restaurante"),
+            BotCommand("mispedidos", "Ver el estado de mis pedidos"),
+            BotCommand("help", "Obtener ayuda")
+        ]
+        await application.bot.set_my_commands(commands)
+        logger.info("✅ Comandos del bot configurados exitosamente")
+    except Exception as e:
+        logger.error(f"❌ Error al configurar comandos del bot: {e}")
+    
+    # Ahora sí, iniciar el polling
     await application.updater.start_polling()
+    logger.info("Bot escuchando mensajes...")
 
     # Mantener este hilo vivo
     while True:
+        await asyncio.sleep(3600)
         await asyncio.sleep(3600)
 
 if __name__ == "__main__":

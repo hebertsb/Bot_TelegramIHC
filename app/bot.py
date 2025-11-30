@@ -77,8 +77,53 @@ async def mis_pedidos(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         reply_markup=reply_markup
     )
 
+
+async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Comando /menu - Abre el menú del restaurante"""
+    if not update.message:
+        logger.warning("La actualización no contiene un mensaje.")
+        return
+        
+    chat_id = update.message.chat_id
+    web_app_url_with_user = f"{WEB_APP_URL}?chat_id={chat_id}"
+
+    keyboard = [[
+        InlineKeyboardButton(
+            "Abrir Menú del Restaurante 🍕",
+            web_app=WebAppInfo(url=f"{web_app_url_with_user}&v={int(time.time())}")
+        )
+    ]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    await update.message.reply_html(
+        "📋 <b>Menú de Pizzería Nova</b>\n\n"
+        "Explora nuestro delicioso menú con pizzas, bebidas, postres y más!",
+        reply_markup=reply_markup
+    )
+
+
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Comando /help - Muestra ayuda sobre los comandos disponibles"""
+    if not update.message:
+        logger.warning("La actualización no contiene un mensaje.")
+        return
+
+    help_text = (
+        "🤖 <b>Comandos Disponibles:</b>\n\n"
+        "/start - Iniciar el bot\n"
+        "/menu - Abrir el menú del restaurante\n"
+        "/mispedidos - Ver el estado de mis pedidos\n"
+        "/help - Obtener ayuda\n\n"
+        "💡 <b>Tip:</b> Usa el botón de menú (☰) para acceder rápidamente a los comandos."
+    )
+
+    await update.message.reply_html(help_text)
+
+
 def get_bot_handlers():
     return [
         CommandHandler("start", start),
+        CommandHandler("menu", menu),
         CommandHandler("mispedidos", mis_pedidos),
+        CommandHandler("help", help_command),
     ]
