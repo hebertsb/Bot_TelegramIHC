@@ -527,6 +527,9 @@ def update_order_status(order_id):
     Endpoint para que un sistema externo (ej. un panel de admin) actualice el estado de un pedido.
     """
     try:
+        # Limpiar ID
+        order_id = order_id.strip()
+
         # Intentar obtener JSON de forma estándar
         data = None
         try:
@@ -583,6 +586,9 @@ def get_order(order_id):
     Útil para el seguimiento del pedido por parte del cliente.
     """
     try:
+        # Limpiar ID de posibles caracteres basura (espacios, saltos de línea)
+        order_id = order_id.strip()
+        
         order = obtener_pedido_por_id(order_id)
         if not order:
             return jsonify({"status": "error", "message": "Pedido no encontrado"}), 404
@@ -912,6 +918,9 @@ def get_driver_orders(driver_id):
     Inyecta la ubicación del restaurante en cada pedido para que la App pueda trazar la ruta.
     """
     try:
+        # Limpiar ID
+        driver_id = driver_id.strip()
+
         # Por simplicidad, buscamos en todos los pedidos. 
         # En producción, haríamos una query filtrada en Firestore.
         all_orders = obtener_todos_los_pedidos()
