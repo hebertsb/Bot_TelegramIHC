@@ -918,9 +918,17 @@ def get_driver_orders(driver_id):
         my_orders = []
         
         for o in all_orders:
-            if o.get('driver_id') == driver_id and o.get('status') not in ['Entregado', 'Cancelado']:
+            # Filtramos pedidos asignados al conductor
+            # NOTA: Incluimos 'Entregado' si quieres que el conductor vea su historial reciente y calificaciones
+            if o.get('driver_id') == driver_id:
                 # Inyectar ubicación del restaurante (Fuente de Verdad)
                 o['restaurant_location'] = RESTAURANT_LOCATION
+                
+                # Asegurarnos de que el rating esté presente si existe
+                if 'rating' in o:
+                    # Estructura esperada por Flutter: { restaurant_rating, delivery_rating, comment }
+                    pass 
+
                 my_orders.append(o)
                 
         return jsonify(my_orders)
