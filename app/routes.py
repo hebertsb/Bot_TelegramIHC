@@ -300,6 +300,39 @@ def rate_order():
         success = guardar_calificacion_pedido(order_id, data)
         
         if success:
+            # --- NOTIFICAR AL RESTAURANTE Y AL DELIVERY ---
+            try:
+                order = obtener_pedido_por_id(order_id)
+                if order:
+                    # Construir mensaje de calificación
+                    stars_rest = "⭐" * int(restaurant_rating)
+                    stars_deliv = "⭐" * int(delivery_rating)
+                    comment = data.get('comment', 'Sin comentarios')
+                    
+                    msg_rating = (
+                        f"<b>🌟 ¡NUEVA CALIFICACIÓN RECIBIDA!</b>\n\n"
+                        f"<b>Pedido:</b> #{order_id}\n"
+                        f"<b>Cliente:</b> {order.get('customer_name', 'Anónimo')}\n\n"
+                        f"<b>🏪 Restaurante:</b> {restaurant_rating}/5 {stars_rest}\n"
+                        f"<b>🛵 Delivery:</b> {delivery_rating}/5 {stars_deliv}\n\n"
+                        f"<b>💬 Comentario:</b>\n<i>{comment}</i>"
+                    )
+
+                    # 1. Notificar al Restaurante
+                    if RESTAURANT_CHAT_ID:
+                        telegram_service.send_message(chat_id=RESTAURANT_CHAT_ID, text=msg_rating)
+                        logger.info(f"Calificación notificada al restaurante ({RESTAURANT_CHAT_ID})")
+
+                    # 2. Notificar al Conductor (si existe y es un ID válido de Telegram)
+                    driver_id = order.get('driver_id')
+                    if driver_id:
+                        # Asumimos que driver_id es el chat_id del conductor
+                        telegram_service.send_message(chat_id=driver_id, text=msg_rating)
+                        logger.info(f"Calificación notificada al conductor ({driver_id})")
+
+            except Exception as e_notify:
+                logger.error(f"Error al notificar calificación: {e_notify}")
+
             return jsonify({"status": "success", "message": "Calificación guardada correctamente"}), 200
         else:
             return jsonify({"status": "error", "message": "No se pudo guardar la calificación"}), 500
