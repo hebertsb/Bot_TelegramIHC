@@ -745,21 +745,24 @@ def submit_order():
                             driver['distance_km'] = 999999
                             drivers_with_distance.append(driver)
                     
-                    # Ordenar conductores por distancia (menor a mayor)
-                    drivers_with_distance.sort(key=lambda x: x['distance_km'])
-                    
-                    # Seleccionar el más cercano
-                    closest_driver = drivers_with_distance[0]
-                    
-                    logger.info(f"Ubicación cliente: {cliente_lat}, {cliente_lon}")
-                    logger.info(f"Conductores disponibles ordenados por distancia al cliente: {[(d['id'], f'{d['distance_km']:.2f}km') for d in drivers_with_distance]}")
-                    
-                    asignar_pedido_a_conductor(order.get('id'), closest_driver['id'])
-                    logger.info(f"Pedido asignado al conductor más cercano AL CLIENTE: {closest_driver['id']} a {closest_driver['distance_km']:.2f}km")
+                    if drivers_with_distance:
+                        # Ordenar conductores por distancia (menor a mayor)
+                        drivers_with_distance.sort(key=lambda x: x['distance_km'])
+                        
+                        # Seleccionar el más cercano
+                        closest_driver = drivers_with_distance[0]
+                        
+                        logger.info(f"Ubicación cliente: {cliente_lat}, {cliente_lon}")
+                        logger.info(f"Conductores LIBRES ordenados por distancia al cliente: {[(d['id'], f'{d['distance_km']:.2f}km') for d in drivers_with_distance]}")
+                        
+                        asignar_pedido_a_conductor(order.get('id'), closest_driver['id'])
+                        logger.info(f"✅ Pedido asignado al conductor más cercano LIBRE: {closest_driver['id']} a {closest_driver['distance_km']:.2f}km")
+                    else:
+                        logger.warning(f"⚠️ No hay conductores con ubicación válida disponibles.")
                 else:
                     logger.warning(f"Pedido sin ubicación del cliente válida. No se puede asignar por cercanía. Location: {cliente_location}")
             else:
-                logger.warning("No hay conductores activos para asignar el pedido.")
+                logger.warning("⚠️ No hay conductores LIBRES disponibles (todos están ocupados con pedidos activos).")
 
         except Exception as e_assign:
             logger.error(f"Error en asignación automática: {e_assign}", exc_info=True)

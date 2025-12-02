@@ -162,20 +162,55 @@ def actualizar_ubicacion_conductor(driver_id, lat, lon, status="disponible"):
 
 def obtener_conductores_activos():
     """
-    Obtiene lista de conductores que han actualizado su ubicación recientemente.
+    Obtiene lista de conductores que han actualizado su ubicación recientemente
+    y que NO tienen pedidos activos (están disponibles para recibir nuevos pedidos).
     """
     if not db:
         return []
         
     try:
-        # En un caso real filtraríamos por tiempo (ej. últimos 5 min)
-        # Para la demo, traemos todos los que estén en estado 'disponible'
+        # Obtener todos los conductores disponibles
         drivers_ref = db.collection('drivers').where('status', '==', 'disponible').stream()
         drivers = [doc.to_dict() for doc in drivers_ref]
-        return drivers
+        
+        # Filtrar solo los que NO tienen pedidos activos
+        conductores_libres = []
+        for driver in drivers:
+            driver_id = driver.get('id')
+            if not tiene_pedidos_activos(driver_id):
+                conductores_libres.append(driver)
+            else:
+                logger.info(f"Conductor {driver_id} tiene pedidos activos, saltando...")
+        
+        return conductores_libres
     except Exception as e:
         logger.error(f"Error al obtener conductores activos: {e}", exc_info=True)
         return []
+
+def tiene_pedidos_activos(driver_id):
+    """
+    Verifica si un conductor tiene pedidos en proceso (no entregados ni cancelados).
+    """
+    if not db:
+        return False
+    
+    try:
+        # Buscar pedidos del conductor que NO estén entregados ni cancelados
+        pedidos_ref = db.collection('pedidos').where('driver_id', '==', driver_id).stream()
+        
+        for pedido_doc in pedidos_ref:
+            pedido = pedido_doc.to_dict()
+            estado = pedido.get('status', pedido.get('estado', ''))
+            
+            # Si tiene algún pedido que no está entregado ni cancelado, está ocupado
+            if estado not in ['Entregado', 'Cancelado']:
+                logger.info(f"Conductor {driver_id} tiene pedido activo: {pedido_doc.id} en estado '{estado}'")
+                return True
+        
+        return False
+    except Exception as e:
+        logger.error(f"Error al verificar pedidos activos del conductor {driver_id}: {e}", exc_info=True)
+        return False
 
 def asignar_pedido_a_conductor(order_id, driver_id):
     """
