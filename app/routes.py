@@ -20,7 +20,7 @@ from app.menu_data import products
 logger = logging.getLogger(__name__)
 
 # --- Configuración de la API de Gemini ---
-genai.configure(api_key=GEMINI_API_KEY)
+genai.configure(api_key=GEMINI_API_KEY) # type: ignore
 
 class TelegramService:
     """Servicio para encapsular la lógica de envío de mensajes de Telegram."""
@@ -601,15 +601,41 @@ def submit_order():
         except Exception as e_notify:
             logger.error(f"Error al enviar notificaciones para pedido {order.get('id')}: {e_notify}", exc_info=True)
 
-        # 4. Asignación Automática de Conductor
+        # 4. Asignación Automática de Conductor (POR CERCANÍA)
         try:
             drivers = obtener_conductores_activos()
             if drivers:
-                driver = drivers[0]
-                asignar_pedido_a_conductor(order.get('id'), driver['id'])
-                logger.info(f"Pedido asignado automáticamente al conductor {driver['id']}")
+                # Calcular distancia de cada conductor al restaurante
+                rest_lat = RESTAURANT_LOCATION['latitude']
+                rest_lon = RESTAURANT_LOCATION['longitude']
+                
+                drivers_with_distance = []
+                for driver in drivers:
+                    d_loc = driver.get('location')
+                    if d_loc and 'latitude' in d_loc and 'longitude' in d_loc:
+                        dist = calculate_distance(rest_lat, rest_lon, d_loc['latitude'], d_loc['longitude'])
+                        driver['distance_km'] = dist
+                        drivers_with_distance.append(driver)
+                    else:
+                        # Si no tiene ubicación válida, lo ponemos al final con distancia infinita
+                        driver['distance_km'] = 999999
+                        drivers_with_distance.append(driver)
+                
+                # Ordenar conductores por distancia (menor a mayor)
+                drivers_with_distance.sort(key=lambda x: x['distance_km'])
+                
+                # Seleccionar el más cercano
+                closest_driver = drivers_with_distance[0]
+                
+                logger.info(f"Conductores disponibles ordenados por distancia: {[(d['id'], f'{d['distance_km']:.2f}km') for d in drivers_with_distance]}")
+                
+                asignar_pedido_a_conductor(order.get('id'), closest_driver['id'])
+                logger.info(f"Pedido asignado al conductor más cercano: {closest_driver['id']} a {closest_driver['distance_km']:.2f}km")
+            else:
+                logger.warning("No hay conductores activos para asignar el pedido.")
+
         except Exception as e_assign:
-            logger.error(f"Error en asignación automática: {e_assign}")
+            logger.error(f"Error en asignación automática: {e_assign}", exc_info=True)
 
         return jsonify({"status": "success", "order_id": order.get('id')})
 
@@ -623,6 +649,7 @@ def generate_pizza_idea():
     Endpoint para generar una idea de pizza (nombre y descripción) usando Gemini.
     Recibe una lista de ingredientes en el cuerpo de la solicitud.
     """
+    response = None
     try:
         # 1. Obtener los ingredientes del request
         data = request.get_json()
@@ -646,9 +673,20 @@ def generate_pizza_idea():
         )
 
         # 3. Llamar a la API de Gemini
-        model = genai.GenerativeModel('gemini-pro')
-        response = model.generate_content(prompt)
-        
+        # Usamos gemini-2.0-flash por ser más rápido y actual
+        model = genai.GenerativeModel('gemini-2.0-flash') # type: ignore
+        try:
+            response = model.generate_content(prompt)
+        except Exception as e:
+             logger.error(f"Error al llamar a Gemini (2.0-flash): {e}")
+             # Si falla, intentamos con gemini-flash-latest como fallback
+             try:
+                logger.info("Intentando fallback a gemini-flash-latest...")
+                model = genai.GenerativeModel('gemini-flash-latest') # type: ignore
+                response = model.generate_content(prompt)
+             except Exception as e2:
+                raise e # Lanzamos el error original si ambos fallan
+
         # 4. Procesar la respuesta
         # Limpiar la respuesta para asegurarse de que es un JSON válido
         cleaned_response_text = response.text.strip().replace("```json", "").replace("```", "").strip()
@@ -662,7 +700,8 @@ def generate_pizza_idea():
         return jsonify(idea)
 
     except json.JSONDecodeError:
-        logger.error(f"Error al decodificar la respuesta de Gemini: {response.text}")
+        error_text = response.text if response else "No response"
+        logger.error(f"Error al decodificar la respuesta de Gemini: {error_text}")
         return jsonify({"error": "No se pudo procesar la respuesta del servicio de IA. Inténtalo de nuevo."}), 500
     except Exception as e:
         logger.error(f"Error en /generate_pizza_idea: {e}", exc_info=True)
@@ -758,15 +797,20 @@ def update_driver_location_endpoint():
 def get_driver_orders(driver_id):
     """
     Obtiene los pedidos asignados a un conductor específico.
+    Inyecta la ubicación del restaurante en cada pedido para que la App pueda trazar la ruta.
     """
     try:
         # Por simplicidad, buscamos en todos los pedidos. 
         # En producción, haríamos una query filtrada en Firestore.
         all_orders = obtener_todos_los_pedidos()
-        my_orders = [
-            o for o in all_orders 
-            if o.get('driver_id') == driver_id and o.get('status') not in ['Entregado', 'Cancelado']
-        ]
+        my_orders = []
+        
+        for o in all_orders:
+            if o.get('driver_id') == driver_id and o.get('status') not in ['Entregado', 'Cancelado']:
+                # Inyectar ubicación del restaurante (Fuente de Verdad)
+                o['restaurant_location'] = RESTAURANT_LOCATION
+                my_orders.append(o)
+                
         return jsonify(my_orders)
     except Exception as e:
         logger.error(f"Error en /driver/orders: {e}")
@@ -781,16 +825,32 @@ def driver_accept_order():
     try:
         data = request.get_json()
         order_id = data.get('order_id')
+        driver_id = data.get('driver_id')
         
-        # Cambiar estado a "Conductor en camino" (o similar)
-        # Para simplificar el flujo obligatorio: "En camino" (al restaurante) o "Repartidor Asignado"
-        # El flujo dice: Asignar -> Aceptar -> Recoger -> Entregar
+        if not order_id or not driver_id:
+            return jsonify({"status": "error", "message": "Faltan datos (order_id o driver_id)"}), 400
+
+        # 1. Verificar que el pedido sigue asignado a este conductor
+        order = obtener_pedido_por_id(order_id)
+        if not order:
+            return jsonify({"status": "error", "message": "Pedido no encontrado"}), 404
+            
+        assigned_driver = order.get('driver_id')
         
+        # Si el pedido ya tiene otro conductor asignado (y no es el que intenta aceptar)
+        if assigned_driver and assigned_driver != driver_id:
+            return jsonify({
+                "status": "error", 
+                "message": "Este pedido ya fue aceptado por otro conductor."
+            }), 409 # Conflict
+
+        # 2. Proceder con la aceptación
+        # Cambiar estado a "Repartidor Asignado" (Confirmación de aceptación)
         success = process_order_status_update(order_id, "Repartidor Asignado")
         if success:
             return jsonify({"status": "success"})
         else:
-            return jsonify({"status": "error"}), 500
+            return jsonify({"status": "error", "message": "No se pudo actualizar el estado"}), 500
     except Exception as e:
         logger.error(f"Error en /driver/accept: {e}")
         return jsonify({"status": "error"}), 500

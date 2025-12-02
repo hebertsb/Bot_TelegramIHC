@@ -1,5 +1,6 @@
 # Credenciales y archivos sensibles
 *.json
+.env
 
 # Entorno virtual de Python
 /env/

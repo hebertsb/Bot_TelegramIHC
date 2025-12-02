@@ -115,7 +115,7 @@ def obtener_todos_los_pedidos():
     try:
         logger.info("Obteniendo todos los pedidos de Firestore...")
         # Se ordena por 'date' en orden descendente para obtener los más recientes primero.
-        pedidos_ref = db.collection('pedidos').order_by('date', direction=firestore.Query.DESCENDING).stream()
+        pedidos_ref = db.collection('pedidos').order_by('date', direction=firestore.Query.DESCENDING).stream() # type: ignore
         
         pedidos = [doc.to_dict() for doc in pedidos_ref]
         
@@ -149,7 +149,7 @@ def actualizar_ubicacion_conductor(driver_id, lat, lon, status="disponible"):
             'id': driver_id,
             'location': {'latitude': lat, 'longitude': lon},
             'status': status,
-            'last_update': firestore.SERVER_TIMESTAMP
+            'last_update': firestore.SERVER_TIMESTAMP # type: ignore
         }
         doc_ref.set(data, merge=True)
         logger.info(f"Ubicación del conductor {driver_id} actualizada: {lat}, {lon}")
