@@ -723,10 +723,14 @@ def submit_order():
 
         # 4. Asignación Automática de Conductor (POR CERCANÍA AL CLIENTE)
         try:
+            logger.info(f"🔍 Intentando asignar pedido {order.get('id')} automáticamente...")
             drivers = obtener_conductores_activos()
+            logger.info(f"📊 Conductores disponibles encontrados: {len(drivers)}")
+            
             if drivers:
                 # Obtener ubicación del cliente desde el pedido
                 cliente_location = order.get('location')
+                logger.info(f"📍 Ubicación del cliente: {cliente_location}")
                 
                 if cliente_location and 'lat' in cliente_location and 'lng' in cliente_location:
                     cliente_lat = cliente_location['lat']
@@ -740,10 +744,12 @@ def submit_order():
                             dist = calculate_distance(cliente_lat, cliente_lon, d_loc['latitude'], d_loc['longitude'])
                             driver['distance_km'] = dist
                             drivers_with_distance.append(driver)
+                            logger.info(f"  - Conductor {driver['id']}: {dist:.2f}km del cliente")
                         else:
                             # Si no tiene ubicación válida, lo ponemos al final con distancia infinita
                             driver['distance_km'] = 999999
                             drivers_with_distance.append(driver)
+                            logger.warning(f"  - Conductor {driver.get('id')} sin ubicación válida")
                     
                     if drivers_with_distance:
                         # Ordenar conductores por distancia (menor a mayor)
@@ -752,20 +758,20 @@ def submit_order():
                         # Seleccionar el más cercano
                         closest_driver = drivers_with_distance[0]
                         
-                        logger.info(f"Ubicación cliente: {cliente_lat}, {cliente_lon}")
-                        logger.info(f"Conductores LIBRES ordenados por distancia al cliente: {[(d['id'], f'{d['distance_km']:.2f}km') for d in drivers_with_distance]}")
+                        logger.info(f"📍 Ubicación cliente: {cliente_lat}, {cliente_lon}")
+                        logger.info(f"🚗 Conductores LIBRES ordenados por distancia al cliente: {[(d['id'], f'{d['distance_km']:.2f}km') for d in drivers_with_distance]}")
                         
                         asignar_pedido_a_conductor(order.get('id'), closest_driver['id'])
                         logger.info(f"✅ Pedido asignado al conductor más cercano LIBRE: {closest_driver['id']} a {closest_driver['distance_km']:.2f}km")
                     else:
                         logger.warning(f"⚠️ No hay conductores con ubicación válida disponibles.")
                 else:
-                    logger.warning(f"Pedido sin ubicación del cliente válida. No se puede asignar por cercanía. Location: {cliente_location}")
+                    logger.warning(f"⚠️ Pedido sin ubicación del cliente válida. No se puede asignar por cercanía. Location: {cliente_location}")
             else:
-                logger.warning("⚠️ No hay conductores LIBRES disponibles (todos están ocupados con pedidos activos).")
+                logger.warning("⚠️ No hay conductores LIBRES disponibles (todos están ocupados con pedidos activos o no tienen ubicación).")
 
         except Exception as e_assign:
-            logger.error(f"Error en asignación automática: {e_assign}", exc_info=True)
+            logger.error(f"❌ Error en asignación automática: {e_assign}", exc_info=True)
 
         return jsonify({"status": "success", "order_id": order.get('id')})
 
