@@ -9,11 +9,11 @@ import pytz
 import threading
 import time
 import math
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 
 # Importaciones de tu aplicación
 from app import app
-from config import RESTAURANT_CHAT_ID, GEMINI_API_KEY, RESTAURANT_LOCATION, RESTAURANT_MAP_LOCATION
+from config import RESTAURANT_CHAT_ID, GEMINI_API_KEY, RESTAURANT_LOCATION, RESTAURANT_MAP_LOCATION, WEBHOOK_PATH, WEBHOOK_SECRET_TOKEN
 from app.services import guardar_pedido_en_firestore, obtener_pedido_por_id, actualizar_estado_pedido, obtener_todos_los_pedidos, actualizar_ubicacion_conductor, obtener_conductores_activos, asignar_pedido_a_conductor
 from app.menu_data import products
 
@@ -51,6 +51,41 @@ class TelegramService:
 # --- Instancia del Servicio de Telegram ---
 # Se crea una instancia vacía que será configurada en run.py
 telegram_service = TelegramService()
+
+@app.route(WEBHOOK_PATH, methods=['POST'])
+async def telegram_webhook():
+    """
+    Endpoint para recibir actualizaciones de Telegram vía Webhook.
+    """
+    # Verificar el token secreto (seguridad)
+    secret_token = request.headers.get("X-Telegram-Bot-Api-Secret-Token")
+    if secret_token != WEBHOOK_SECRET_TOKEN:
+        logger.warning("Intento de acceso no autorizado al webhook")
+        return jsonify({"status": "error", "message": "Unauthorized"}), 403
+
+    # Procesar la actualización
+    if request.method == "POST":
+        try:
+            # Recuperar la aplicación desde el servicio (inyectada en run.py)
+            if not hasattr(telegram_service, 'application') or not telegram_service.application: # type: ignore
+                logger.error("La aplicación de Telegram no está inicializada en el servicio")
+                return jsonify({"status": "error", "message": "Service unavailable"}), 503
+
+            if not telegram_service.bot:
+                logger.error("El bot no está inicializado en el servicio")
+                return jsonify({"status": "error", "message": "Bot unavailable"}), 503
+
+            update = Update.de_json(request.get_json(force=True), telegram_service.bot)
+            
+            # Procesar la actualización en el loop del bot
+            await telegram_service.application.process_update(update) # type: ignore
+            
+            return jsonify({"status": "ok"}), 200
+        except Exception as e:
+            logger.error(f"Error procesando webhook: {e}", exc_info=True)
+            return jsonify({"status": "error", "message": str(e)}), 500
+    
+    return jsonify({"status": "ok"}), 200
 
 def generate_telegram_invoice_text(order):
     """Genera el texto de la factura para ser enviado por Telegram."""
