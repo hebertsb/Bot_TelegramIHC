@@ -85,14 +85,17 @@ async def run_telegram_bot_webhook(webhook_url):
     Configura y corre el bot de Telegram en modo WEBHOOK
     """
     # Asignamos el loop de asyncio a la app de Flask para que las rutas puedan usarlo
-    app.bot_loop = asyncio.get_running_loop()
+    app.bot_loop = asyncio.get_running_loop() # type: ignore
+
+    if not BOT_TOKEN:
+        raise ValueError("BOT_TOKEN no está configurado")
 
     application = Application.builder().token(BOT_TOKEN).build()
     
     # Configurar el servicio de Telegram
     telegram_service.bot = application.bot
     telegram_service.loop = asyncio.get_running_loop()
-    telegram_service.application = application
+    telegram_service.application = application # type: ignore
     
     handlers = get_bot_handlers()
     for handler in handlers:
@@ -133,14 +136,17 @@ async def run_telegram_bot_polling():
     Configura y corre el bot de Telegram en modo POLLING (fallback)
     """
     # Asignamos el loop de asyncio a la app de Flask para que las rutas puedan usarlo
-    app.bot_loop = asyncio.get_running_loop()
+    app.bot_loop = asyncio.get_running_loop() # type: ignore
+
+    if not BOT_TOKEN:
+        raise ValueError("BOT_TOKEN no está configurado")
 
     application = Application.builder().token(BOT_TOKEN).build()
     
     # Configurar el servicio de Telegram
     telegram_service.bot = application.bot
     telegram_service.loop = asyncio.get_running_loop()
-    telegram_service.application = application
+    telegram_service.application = application # type: ignore
     
     handlers = get_bot_handlers()
     for handler in handlers:
@@ -165,7 +171,8 @@ async def run_telegram_bot_polling():
         logger.error(f"❌ Error al configurar comandos del bot: {e}")
     
     # Ahora sí, iniciar el polling
-    await application.updater.start_polling()
+    if application.updater:
+        await application.updater.start_polling()
     logger.info("Bot escuchando mensajes...")
 
     # Mantener este hilo vivo
@@ -181,32 +188,36 @@ if __name__ == "__main__":
     flask_thread.start()
 
     # Determinar si usar webhook o polling
-    use_webhook = os.environ.get("USE_WEBHOOK", "true").lower() == "true"
+    # En Railway, WEBHOOK_URL debe estar definida.
+    webhook_url_env = os.environ.get("WEBHOOK_URL")
     
     try:
-        if use_webhook:
-            # Intentar usar webhook con ngrok
-            logger.info("🚀 Modo WEBHOOK activado")
+        if webhook_url_env:
+            # MODO PRODUCCIÓN (Railway)
+            logger.info(f"🚀 Modo WEBHOOK activado (Producción). URL: {webhook_url_env}")
+            # Eliminar trailing slash si existe
+            webhook_url_env = webhook_url_env.rstrip('/')
+            asyncio.run(run_telegram_bot_webhook(webhook_url_env))
             
-            # Obtener URL de ngrok (puede ser automática o manual)
-            ngrok_url = os.environ.get("NGROK_URL")
+        else:
+            # MODO DESARROLLO LOCAL (ngrok o Polling)
+            use_webhook = os.environ.get("USE_WEBHOOK", "true").lower() == "true"
             
-            if not ngrok_url:
+            if use_webhook:
+                logger.info("🚀 Modo WEBHOOK activado (Local/ngrok)")
                 # Intentar iniciar ngrok automáticamente
                 ngrok_url = start_ngrok()
-            
-            if ngrok_url:
-                # Eliminar trailing slash si existe
-                ngrok_url = ngrok_url.rstrip('/')
-                logger.info(f"Usando webhook URL: {ngrok_url}")
-                asyncio.run(run_telegram_bot_webhook(ngrok_url))
+                
+                if ngrok_url:
+                    ngrok_url = ngrok_url.rstrip('/')
+                    logger.info(f"Usando webhook URL: {ngrok_url}")
+                    asyncio.run(run_telegram_bot_webhook(ngrok_url))
+                else:
+                    logger.warning("No se pudo obtener URL de ngrok. Cambiando a POLLING...")
+                    asyncio.run(run_telegram_bot_polling())
             else:
-                logger.warning("No se pudo obtener URL de ngrok. Cambiando a POLLING...")
+                logger.info("📡 Modo POLLING activado")
                 asyncio.run(run_telegram_bot_polling())
-        else:
-            # Usar polling
-            logger.info("📡 Modo POLLING activado")
-            asyncio.run(run_telegram_bot_polling())
             
     except KeyboardInterrupt:
         logger.info("Cerrando la aplicación...")
