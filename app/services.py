@@ -107,6 +107,7 @@ def obtener_todos_los_pedidos():
     """
     Obtiene todos los pedidos de la colección 'pedidos' en Firestore,
     ordenados por fecha descendente.
+    LIMITADO a los últimos 50 para evitar cuotas excedidas.
     """
     if not db:
         logger.error("No se pueden obtener los pedidos: La conexión con Firebase no está disponible.")
@@ -115,7 +116,8 @@ def obtener_todos_los_pedidos():
     try:
         logger.info("Obteniendo todos los pedidos de Firestore...")
         # Se ordena por 'date' en orden descendente para obtener los más recientes primero.
-        pedidos_ref = db.collection('pedidos').order_by('date', direction=firestore.Query.DESCENDING).stream() # type: ignore
+        # LIMITAMOS A 50 para no saturar la cuota gratuita de Firebase
+        pedidos_ref = db.collection('pedidos').order_by('date', direction=firestore.Query.DESCENDING).limit(50).stream() # type: ignore
         
         pedidos = [doc.to_dict() for doc in pedidos_ref]
         
@@ -125,8 +127,8 @@ def obtener_todos_los_pedidos():
         logger.error(f"Error al obtener todos los pedidos de Firestore: {e}", exc_info=True)
         # Si hay un error (ej. el campo 'date' no existe en todos los docs), intenta sin ordenar.
         try:
-            logger.warning("Intentando obtener pedidos sin ordenar por fecha.")
-            pedidos_ref = db.collection('pedidos').stream()
+            logger.warning("Intentando obtener pedidos sin ordenar por fecha (Limitado a 20).")
+            pedidos_ref = db.collection('pedidos').limit(20).stream()
             pedidos = [doc.to_dict() for doc in pedidos_ref]
             logger.info(f"Se encontraron {len(pedidos)} pedidos sin ordenar.")
             return pedidos
