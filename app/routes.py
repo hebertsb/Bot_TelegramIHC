@@ -329,6 +329,8 @@ def rate_order():
                         # Asumimos que driver_id es el chat_id del conductor
                         telegram_service.send_message(chat_id=driver_id, text=msg_rating)
                         logger.info(f"Calificación notificada al conductor ({driver_id})")
+                    else:
+                        logger.warning(f"El pedido {order_id} fue calificado pero NO tiene conductor asignado (driver_id). No se notificó al delivery.")
 
             except Exception as e_notify:
                 logger.error(f"Error al notificar calificación: {e_notify}")
@@ -974,7 +976,11 @@ def driver_accept_order():
             }), 409 # Conflict
 
         # 2. Proceder con la aceptación
-        # Cambiar estado a "Repartidor Asignado" (Confirmación de aceptación)
+        # PRIMERO: Asegurar que el driver_id quede guardado en la BD (Vinculación Fuerte)
+        # Esto soluciona el problema de pedidos sin conductor que no reciben notificaciones de calificación
+        asignar_pedido_a_conductor(order_id, driver_id)
+
+        # SEGUNDO: Notificar al usuario y actualizar estado
         success = process_order_status_update(order_id, "Repartidor Asignado")
         if success:
             return jsonify({"status": "success"})
