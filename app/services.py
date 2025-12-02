@@ -257,6 +257,8 @@ def asignar_pedido_al_conductor_mas_cercano(order_id, restaurant_location):
     except Exception as e:
         logger.error(f"Error al asignar pedido automáticamente: {e}", exc_info=True)
         return False
+
+def asignar_pedido_a_conductor(order_id, driver_id):
     """
     Asigna un pedido a un conductor específico.
     """
