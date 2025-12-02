@@ -96,7 +96,31 @@ Usa Google Gemini para crear una pizza personalizada.
 - **Payload:** `{"ingredients": ["piña", "jamón", "jalapeños"]}`
 - **Respuesta:** `{"name": "...", "description": "..."}`
 
-### 1.4. Ver Factura Web
+### 1.4. Calificar Pedido (Nuevo)
+
+Permite al cliente enviar una valoración del servicio una vez que el pedido ha sido entregado.
+
+- **Endpoint:** `/api/rate_order`
+- **Método:** `POST`
+- **Headers:** `Content-Type: application/json`
+- **Payload:**
+  ```json
+  {
+    "order_id": "ORD-1764661802983-8602",
+    "restaurant_rating": 5, // Entero 1-5
+    "delivery_rating": 4, // Entero 1-5
+    "comment": "Excelente servicio, llegó muy rápido." // Opcional
+  }
+  ```
+- **Respuesta (200 OK):**
+  ```json
+  {
+    "status": "success",
+    "message": "Calificación guardada correctamente"
+  }
+  ```
+
+### 1.5. Ver Factura Web
 
 Renderiza una vista HTML de la factura.
 
@@ -186,7 +210,12 @@ El conductor entrega el pedido al cliente.
 - **Endpoint:** `/driver/deliver`
 - **Método:** `POST`
 - **Payload:** `{"order_id": "ORD-123"}`
-- **Efecto:** Cambia estado a `Entregado` y notifica al cliente.
+- **Efecto:**
+  1. Cambia estado a `Entregado`.
+  2. Notifica al cliente vía Telegram.
+  3. **Incluye un botón "⭐ Calificar Pedido"** en el mensaje de Telegram.
+     - Este botón abre la WebApp con parámetros: `?order_id=ORD-123&action=rate`.
+     - **Frontend:** Debe detectar `action=rate` en la URL al iniciar y redirigir al usuario a la pantalla de "Mis Pedidos" -> "Seguimiento" -> Modal de Calificación.
 
 ---
 
