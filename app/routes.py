@@ -721,36 +721,43 @@ def submit_order():
         except Exception as e_notify:
             logger.error(f"Error al enviar notificaciones para pedido {order.get('id')}: {e_notify}", exc_info=True)
 
-        # 4. Asignación Automática de Conductor (POR CERCANÍA)
+        # 4. Asignación Automática de Conductor (POR CERCANÍA AL CLIENTE)
         try:
             drivers = obtener_conductores_activos()
             if drivers:
-                # Calcular distancia de cada conductor al restaurante
-                rest_lat = RESTAURANT_LOCATION['latitude']
-                rest_lon = RESTAURANT_LOCATION['longitude']
+                # Obtener ubicación del cliente desde el pedido
+                cliente_location = order.get('location')
                 
-                drivers_with_distance = []
-                for driver in drivers:
-                    d_loc = driver.get('location')
-                    if d_loc and 'latitude' in d_loc and 'longitude' in d_loc:
-                        dist = calculate_distance(rest_lat, rest_lon, d_loc['latitude'], d_loc['longitude'])
-                        driver['distance_km'] = dist
-                        drivers_with_distance.append(driver)
-                    else:
-                        # Si no tiene ubicación válida, lo ponemos al final con distancia infinita
-                        driver['distance_km'] = 999999
-                        drivers_with_distance.append(driver)
-                
-                # Ordenar conductores por distancia (menor a mayor)
-                drivers_with_distance.sort(key=lambda x: x['distance_km'])
-                
-                # Seleccionar el más cercano
-                closest_driver = drivers_with_distance[0]
-                
-                logger.info(f"Conductores disponibles ordenados por distancia: {[(d['id'], f'{d['distance_km']:.2f}km') for d in drivers_with_distance]}")
-                
-                asignar_pedido_a_conductor(order.get('id'), closest_driver['id'])
-                logger.info(f"Pedido asignado al conductor más cercano: {closest_driver['id']} a {closest_driver['distance_km']:.2f}km")
+                if cliente_location and 'lat' in cliente_location and 'lng' in cliente_location:
+                    cliente_lat = cliente_location['lat']
+                    cliente_lon = cliente_location['lng']
+                    
+                    drivers_with_distance = []
+                    for driver in drivers:
+                        d_loc = driver.get('location')
+                        if d_loc and 'latitude' in d_loc and 'longitude' in d_loc:
+                            # Calcular distancia del conductor AL CLIENTE
+                            dist = calculate_distance(cliente_lat, cliente_lon, d_loc['latitude'], d_loc['longitude'])
+                            driver['distance_km'] = dist
+                            drivers_with_distance.append(driver)
+                        else:
+                            # Si no tiene ubicación válida, lo ponemos al final con distancia infinita
+                            driver['distance_km'] = 999999
+                            drivers_with_distance.append(driver)
+                    
+                    # Ordenar conductores por distancia (menor a mayor)
+                    drivers_with_distance.sort(key=lambda x: x['distance_km'])
+                    
+                    # Seleccionar el más cercano
+                    closest_driver = drivers_with_distance[0]
+                    
+                    logger.info(f"Ubicación cliente: {cliente_lat}, {cliente_lon}")
+                    logger.info(f"Conductores disponibles ordenados por distancia al cliente: {[(d['id'], f'{d['distance_km']:.2f}km') for d in drivers_with_distance]}")
+                    
+                    asignar_pedido_a_conductor(order.get('id'), closest_driver['id'])
+                    logger.info(f"Pedido asignado al conductor más cercano AL CLIENTE: {closest_driver['id']} a {closest_driver['distance_km']:.2f}km")
+                else:
+                    logger.warning(f"Pedido sin ubicación del cliente válida. No se puede asignar por cercanía. Location: {cliente_location}")
             else:
                 logger.warning("No hay conductores activos para asignar el pedido.")
 
