@@ -201,3 +201,35 @@ def asignar_pedido_a_conductor(order_id, driver_id):
     except Exception as e:
         logger.error(f"Error al asignar pedido {order_id} a conductor {driver_id}: {e}", exc_info=True)
         return False
+
+def guardar_calificacion_pedido(order_id, rating_data):
+    """
+    Guarda la calificación del cliente para un pedido.
+    rating_data espera: { 'restaurant_rating': int, 'delivery_rating': int, 'comment': str }
+    """
+    if not db:
+        return False
+        
+    try:
+        order_ref = db.collection('pedidos').document(str(order_id))
+        
+        # Verificar si el pedido existe
+        if not order_ref.get().exists:
+            logger.warning(f"Intento de calificar pedido inexistente: {order_id}")
+            return False
+
+        update_data = {
+            'rating': {
+                'restaurant_rating': rating_data.get('restaurant_rating'),
+                'delivery_rating': rating_data.get('delivery_rating'),
+                'comment': rating_data.get('comment', ''),
+                'timestamp': firestore.SERVER_TIMESTAMP # type: ignore
+            }
+        }
+        
+        order_ref.update(update_data)
+        logger.info(f"Calificación guardada para el pedido {order_id}")
+        return True
+    except Exception as e:
+        logger.error(f"Error al guardar calificación del pedido {order_id}: {e}", exc_info=True)
+        return False

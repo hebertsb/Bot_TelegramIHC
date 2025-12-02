@@ -13,8 +13,8 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 
 # Importaciones de tu aplicación
 from app import app
-from config import RESTAURANT_CHAT_ID, GEMINI_API_KEY, RESTAURANT_LOCATION, RESTAURANT_MAP_LOCATION, WEBHOOK_PATH, WEBHOOK_SECRET_TOKEN
-from app.services import guardar_pedido_en_firestore, obtener_pedido_por_id, actualizar_estado_pedido, obtener_todos_los_pedidos, actualizar_ubicacion_conductor, obtener_conductores_activos, asignar_pedido_a_conductor
+from config import RESTAURANT_CHAT_ID, GEMINI_API_KEY, RESTAURANT_LOCATION, RESTAURANT_MAP_LOCATION, WEBHOOK_PATH, WEBHOOK_SECRET_TOKEN, WEB_APP_URL
+from app.services import guardar_pedido_en_firestore, obtener_pedido_por_id, actualizar_estado_pedido, obtener_todos_los_pedidos, actualizar_ubicacion_conductor, obtener_conductores_activos, asignar_pedido_a_conductor, guardar_calificacion_pedido
 from app.menu_data import products
 
 logger = logging.getLogger(__name__)
@@ -277,6 +277,37 @@ def get_products():
     """
     return jsonify(products)
 
+@app.route('/api/rate_order', methods=['POST'])
+def rate_order():
+    """
+    Endpoint para recibir la calificación del pedido desde la WebApp.
+    Espera JSON: { "order_id": "...", "restaurant_rating": 1-5, "delivery_rating": 1-5, "comment": "..." }
+    """
+    try:
+        data = request.get_json()
+        order_id = data.get('order_id')
+        
+        if not order_id:
+            return jsonify({"status": "error", "message": "Falta order_id"}), 400
+
+        # Validar ratings
+        restaurant_rating = data.get('restaurant_rating')
+        delivery_rating = data.get('delivery_rating')
+        
+        if not (1 <= restaurant_rating <= 5) or not (1 <= delivery_rating <= 5):
+             return jsonify({"status": "error", "message": "Ratings deben ser entre 1 y 5"}), 400
+
+        success = guardar_calificacion_pedido(order_id, data)
+        
+        if success:
+            return jsonify({"status": "success", "message": "Calificación guardada correctamente"}), 200
+        else:
+            return jsonify({"status": "error", "message": "No se pudo guardar la calificación"}), 500
+
+    except Exception as e:
+        logger.error(f"Error en /api/rate_order: {e}", exc_info=True)
+        return jsonify({"status": "error", "message": str(e)}), 500
+
 @app.route('/factura/<string:order_id>', methods=['GET'])
 def get_invoice(order_id):
     """
@@ -329,7 +360,20 @@ def process_order_status_update(order_id, nuevo_estado, driver_location=None):
                     "Cancelado": f"❌ Lo sentimos, tu pedido #{order_id} ha sido cancelado."
                 }
                 mensaje = mensajes_estado.get(nuevo_estado, f"ℹ️ El estado de tu pedido #{order_id} ha cambiado a: {nuevo_estado}")
-                telegram_service.send_message(chat_id=chat_id, text=mensaje)
+                
+                # Si el pedido fue entregado, agregar botón para calificar
+                reply_markup = None
+                if nuevo_estado == "Entregado":
+                    # URL para calificar en la WebApp (asumiendo que la ruta es /track-order?id=...&rate=true o similar)
+                    # Ajusta la URL según la estructura de tu frontend Flutter/Web
+                    rating_url = f"{WEB_APP_URL}?order_id={order_id}&action=rate"
+                    keyboard = [
+                        [InlineKeyboardButton("⭐ Calificar Pedido", url=rating_url)]
+                    ]
+                    reply_markup = InlineKeyboardMarkup(keyboard)
+                    mensaje += "\n\n🙏 Por favor, tómate un momento para calificar tu experiencia."
+
+                telegram_service.send_message(chat_id=chat_id, text=mensaje, reply_markup=reply_markup)
                 logger.info(f"Notificación enviada a {chat_id}: {nuevo_estado}")
         except Exception as e_notify:
             # Si falla la notificación, NO fallamos todo el proceso. Solo logueamos el error.
