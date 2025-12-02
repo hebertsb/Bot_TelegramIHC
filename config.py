@@ -37,7 +37,7 @@ if firebase_base64:
         FIREBASE_CREDENTIALS = None
 else:
     # 2. Fallback a archivo local (Solo si NO existe la variable de entorno)
-    local_path = os.path.join(_project_root, "pizzeriabackend-firebase-adminsdk-fbsvc-f65e1c0eb7.json")
+    local_path = os.path.join(_project_root, "pizzerianova-firebase-adminsdk-fbsvc-5bea994d7b.json")
     if os.path.exists(local_path):
         FIREBASE_CREDENTIALS = local_path
         print(f"ℹ️ Usando archivo local de credenciales: {FIREBASE_CREDENTIALS}")
