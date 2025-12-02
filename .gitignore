@@ -1,6 +1,7 @@
 # Credenciales y archivos sensibles
 *.json
 .env
+VARIABLES_ENTORNO_RAILWAY.txt
 
 # Entorno virtual de Python
 /env/

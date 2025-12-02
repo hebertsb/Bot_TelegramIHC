@@ -9,7 +9,7 @@ import pytz
 import threading
 import time
 import math
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update, WebAppInfo
 
 # Importaciones de tu aplicación
 from app import app
@@ -368,7 +368,7 @@ def process_order_status_update(order_id, nuevo_estado, driver_location=None):
                     # Ajusta la URL según la estructura de tu frontend Flutter/Web
                     rating_url = f"{WEB_APP_URL}?order_id={order_id}&action=rate"
                     keyboard = [
-                        [InlineKeyboardButton("⭐ Calificar Pedido", url=rating_url)]
+                        [InlineKeyboardButton("⭐ Calificar Pedido", web_app=WebAppInfo(url=rating_url))]
                     ]
                     reply_markup = InlineKeyboardMarkup(keyboard)
                     mensaje += "\n\n🙏 Por favor, tómate un momento para calificar tu experiencia."
