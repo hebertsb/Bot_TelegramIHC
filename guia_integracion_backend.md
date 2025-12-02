@@ -119,6 +119,10 @@ Permite al cliente enviar una valoración del servicio una vez que el pedido ha 
     "message": "Calificación guardada correctamente"
   }
   ```
+  > **Nota sobre Notificaciones:** Al recibir una calificación exitosa, el Backend automáticamente:
+  > 1. Guarda los datos en el documento del pedido en Firebase (`rating` field).
+  > 2. Envía una notificación inmediata vía Telegram al **Restaurante** con el detalle de estrellas y comentario.
+  > 3. Envía una notificación inmediata vía Telegram al **Conductor** asignado (si tiene chat_id registrado) felicitándolo o informándole del feedback.
 
 ### 1.5. Ver Factura Web
 
