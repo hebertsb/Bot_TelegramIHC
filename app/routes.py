@@ -14,7 +14,25 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update, WebAppI
 # Importaciones de tu aplicación
 from app import app
 from config import RESTAURANT_CHAT_ID, GEMINI_API_KEY, RESTAURANT_LOCATION, RESTAURANT_MAP_LOCATION, WEBHOOK_PATH, WEBHOOK_SECRET_TOKEN, WEB_APP_URL
-from app.services import guardar_pedido_en_firestore, obtener_pedido_por_id, actualizar_estado_pedido, obtener_todos_los_pedidos, actualizar_ubicacion_conductor, obtener_conductores_activos, asignar_pedido_a_conductor, guardar_calificacion_pedido
+from app.services import guardar_pedido_en_firestore, obtener_pedido_por_id, actualizar_estado_pedido, obtener_todos_los_pedidos, actualizar_ubicacion_conductor, obtener_conductores_activos, asignar_pedido_a_conductor, guardar_calificacion_pedido, asignar_pedido_al_conductor_mas_cercano
+@app.route('/api/create_order', methods=['POST'])
+def create_order():
+    """Crea un pedido y lo asigna automáticamente al conductor más cercano al restaurante."""
+    try:
+        data = request.get_json()
+        # Guardar el pedido en Firestore
+        exito = guardar_pedido_en_firestore(data)
+        if not exito:
+            return jsonify({"status": "error", "message": "No se pudo guardar el pedido"}), 500
+        # Asignar al conductor más cercano
+        asignado = asignar_pedido_al_conductor_mas_cercano(data['id'], RESTAURANT_LOCATION)
+        if asignado:
+            return jsonify({"status": "ok", "message": "Pedido creado y asignado al conductor más cercano"})
+        else:
+            return jsonify({"status": "ok", "message": "Pedido creado pero no hay conductores disponibles"})
+    except Exception as e:
+        logger.error(f"Error en create_order: {e}")
+        return jsonify({"status": "error", "message": str(e)}), 500
 from app.menu_data import products
 
 logger = logging.getLogger(__name__)

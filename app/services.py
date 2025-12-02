@@ -212,7 +212,51 @@ def tiene_pedidos_activos(driver_id):
         logger.error(f"Error al verificar pedidos activos del conductor {driver_id}: {e}", exc_info=True)
         return False
 
-def asignar_pedido_a_conductor(order_id, driver_id):
+def calcular_distancia_km(lat1, lon1, lat2, lon2):
+    """Calcula la distancia en kilómetros entre dos puntos usando la fórmula de Haversine."""
+    from math import radians, sin, cos, sqrt, atan2
+    R = 6371.0  # Radio de la Tierra en km
+    dlat = radians(lat2 - lat1)
+    dlon = radians(lon2 - lon1)
+    a = sin(dlat / 2) ** 2 + cos(radians(lat1)) * cos(radians(lat2)) * sin(dlon / 2) ** 2
+    c = 2 * atan2(sqrt(a), sqrt(1 - a))
+    return R * c
+
+def asignar_pedido_al_conductor_mas_cercano(order_id, restaurant_location):
+    """Busca el conductor más cercano al restaurante y asigna el pedido."""
+    if not db:
+        return False
+    try:
+        conductores = obtener_conductores_activos()
+        if not conductores:
+            logger.warning("No hay conductores disponibles para asignar el pedido.")
+            return False
+        lat_rest = restaurant_location['latitude']
+        lon_rest = restaurant_location['longitude']
+        min_dist = None
+        conductor_cercano = None
+        for conductor in conductores:
+            loc = conductor.get('location')
+            if loc:
+                dist = calcular_distancia_km(lat_rest, lon_rest, loc['latitude'], loc['longitude'])
+                if min_dist is None or dist < min_dist:
+                    min_dist = dist
+                    conductor_cercano = conductor
+        if not conductor_cercano:
+            logger.warning("No se encontró conductor con ubicación válida.")
+            return False
+        driver_id = conductor_cercano['id']
+        # Asignar el pedido
+        order_ref = db.collection('pedidos').document(str(order_id))
+        order_ref.update({
+            'driver_id': driver_id,
+            'status': 'Repartidor Asignado'
+        })
+        logger.info(f"Pedido {order_id} asignado automáticamente al conductor más cercano: {driver_id} (distancia: {min_dist:.2f} km)")
+        return True
+    except Exception as e:
+        logger.error(f"Error al asignar pedido automáticamente: {e}", exc_info=True)
+        return False
     """
     Asigna un pedido a un conductor específico.
     """
